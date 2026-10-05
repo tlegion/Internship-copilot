@@ -9,6 +9,6 @@ def display_history(history: list):
             print(f"Assistant: {item.text}")
 
 def get_user_input(round:int) -> UserInput:
-    user_input = input()
+    user_input = input("Enter your prompt:")
     return UserInput(user_input, None, round=round)
 

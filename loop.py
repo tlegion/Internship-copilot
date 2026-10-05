@@ -5,7 +5,7 @@ from openai import OpenAI
 from enum import Enum
 from typing import Any
 from provider import call_model, format_tool_output, format_user_input, load_tool_arguments
-from tool_call import run_tool
+from tool_call import run_tool, tool_list, tools
 from conversation import get_user_input, display_history
 from models import ModelProvider, ModelResponse, ModelToolCall, UserInput, ToolOutput
 
@@ -44,6 +44,21 @@ def adapt_provider_format(provider:ModelProvider, history:list):
 
     return formatted
 
+def construct_system_prompt():
+    return """
+You are an internship assistant agent.
+
+Your job is to help the user retrieve and reason about internship-related information accurately.
+
+Rules:
+- Use the available tools whenever the user's request requires information provided by a tool.
+- Never invent tool results or claim that a tool returned information that it did not return.
+- Use tool outputs as the source of truth for tool-provided data.
+- When a tool call is required, provide only the arguments required by that tool.
+- After receiving tool output, continue the task and give the user a clear final answer.
+- If a tool fails or returns an error, do not fabricate a replacement result. Explain the limitation clearly.
+- Keep responses concise and directly relevant to the user's request.
+""".strip()
 
 
 def conversation_loop(provider:ModelProvider= ModelProvider.OPENAI, model:str= "gpt-6-luna", max_round:int = 10):
@@ -56,18 +71,28 @@ def conversation_loop(provider:ModelProvider= ModelProvider.OPENAI, model:str= "
         display_history(history)
         user_input = get_user_input(round)
         history.append(user_input)
-        response = call_model(provider, model, round, adapt_provider_format(provider, history))
+        response = call_model(
+            provider, model, 
+            adapt_provider_format(provider, history), 
+            construct_system_prompt(), round
+        )
         if getattr(response, "error_msg", None):
             #  place holder
-            history.extend(response)
+            history.append(response)
             continue
 
-        history.extend(response)
+        history.append(response)
 
         if tool_calls := getattr(response, "tool_calls", None):
-            tool_outputs= tool_loop(tool_calls, provider)
+            tool_outputs= tool_loop(tool_calls, provider, round)
 
-            history.extend(format_tool_output(tool_outputs, provider))
+            history.extend(tool_outputs)
+            response = call_model(
+                provider, model, 
+                adapt_provider_format(provider, history), 
+                construct_system_prompt(), round
+            )
+
 
         round += 1
 
