@@ -1,4 +1,4 @@
-from loop import UserInput, conversation_loop, ModelProvider
+from models import ModelProvider, ModelResponse, ModelToolCall, UserInput, ToolOutput
 
 def display_history(history: list):
     for item in history:
@@ -8,12 +8,7 @@ def display_history(history: list):
         elif isinstance(item, ModelResponse) and item.text:
             print(f"Assistant: {item.text}")
 
-def get_user_input() -> UserInput:
+def get_user_input(round:int) -> UserInput:
     user_input = input()
-    return UserInput(user_input, None)
+    return UserInput(user_input, None, round=round)
 
-def start_conversation_OpenAI():
-    conversation_loop()
-
-if __name__ == "__main__":
-    start_conversation_OpenAI()

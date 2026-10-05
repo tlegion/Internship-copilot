@@ -7,85 +7,22 @@ from typing import Any
 from provider import call_model, format_tool_output, format_user_input, load_tool_arguments
 from tool_call import run_tool
 from conversation import get_user_input, display_history
+from models import ModelProvider, ModelResponse, ModelToolCall, UserInput, ToolOutput
 
 load_dotenv(Path(__file__).with_name('.env'))
 
-class ModelProvider(Enum):
-    OPENAI = "openai"
-    ANTHROPIC = "anthroopic"
-    GOOGLE = "google"
-    DEEPSEEK = "deepseek"
-
-class UserInput:
-    role = "user"
-    text: str
-    file: Any
-
-    def __init__(self, text, file):
-        self.text = text
-        self.file = file
-
-class ModelToolCall:
-    tool_name: str
-    arguments: dict
-    call_id: str
-
-    def __init__(
-        self,
-        tool_name: str,
-        arguments: dict,
-        call_id: str,
-    ):
-        self.tool_name = tool_name
-        self.arguments = arguments
-        self.call_id = call_id
 
 
-class ModelResponse:
-    role = "assistant"
-    text: str | None
-    tool_calls: list[ModelToolCall]
-    status: str
-    raw: Any
-
-    def __init__(
-        self,
-        text: str | None,
-        tool_calls: list[ModelToolCall],
-        status: str,
-        raw: Any,
-    ):
-        self.text = text
-        self.tool_calls = tool_calls
-        self.status = status
-        self.raw = raw
-
-class ToolOutput:
-    call_id: str
-    outputs: Any
-    tool_name: str
-
-    def __init__(
-        self,
-        tool_name: str,
-        call_id: str,
-        output: Any,
-    ):
-        self.tool_name = tool_name
-        self.call_id = call_id
-        self.output = output
-
-
-
-def tool_loop(tool_calls:list[ModelToolCall], provider:ModelProvider, max_tool_call:int = 10):
+def tool_loop(tool_calls:list[ModelToolCall], provider:ModelProvider, round:int,  max_tool_call:int = 10):
     tool_outputs:list[ToolOutput] = []
     call_count = 0
     for call in tool_calls:
         result= run_tool(call.tool_name, load_tool_arguments(call.arguments, provider))
-        tool_calls.append(ToolOutput(
+        tool_outputs.append(ToolOutput(
             tool_name=call.tool_name,
             call_id=call.call_id,
-            output=result
+            output=result,
+            round= round
         ))
         call_count += 1
         if call_count >= max_tool_call:
@@ -102,7 +39,7 @@ def adapt_provider_format(provider:ModelProvider, history:list):
         elif isinstance(item,ModelResponse):
             if provider == ModelProvider.OPENAI:
                 formatted.extend(item.raw.output)
-        elif isinstance(item, list[ToolOutput]):
+        elif isinstance(item, ToolOutput):
             formatted.append(format_tool_output(item, provider))
 
     return formatted
@@ -112,13 +49,14 @@ def adapt_provider_format(provider:ModelProvider, history:list):
 def conversation_loop(provider:ModelProvider= ModelProvider.OPENAI, model:str= "gpt-6-luna", max_round:int = 10):
     history = []
     user_ended = False
-    round = 0
+    round = 1
 
 
     while not user_ended and round <= max_round:
         display_history(history)
-        input = get_user_input()
-        response = call_model(provider, model, adapt_provider_format(provider, history))
+        user_input = get_user_input(round)
+        history.append(user_input)
+        response = call_model(provider, model, round, adapt_provider_format(provider, history))
         if getattr(response, "error_msg", None):
             #  place holder
             history.extend(response)
@@ -127,11 +65,16 @@ def conversation_loop(provider:ModelProvider= ModelProvider.OPENAI, model:str= "
         history.extend(response)
 
         if tool_calls := getattr(response, "tool_calls", None):
-           tool_outputs= tool_loop(tool_calls, provider)
+            tool_outputs= tool_loop(tool_calls, provider)
 
-        history.extend(format_tool_output(tool_outputs, provider))
+            history.extend(format_tool_output(tool_outputs, provider))
 
         round += 1
 
 
 
+def start_conversation_OpenAI():
+    conversation_loop()
+
+if __name__ == "__main__":
+    start_conversation_OpenAI()
