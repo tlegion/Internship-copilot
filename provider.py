@@ -11,13 +11,13 @@ def call_model(
         provider: ModelProvider, 
         model:str, history:list, 
         system_prompt:str,
-        round:int,
+        round:int, tool_choice:str = "auto",
         max_output_tokens:int = 128, 
         reasoning_effort:str = "none",
     ):
     load_dotenv(Path(__file__).with_name(".env"))
     if provider == ModelProvider.OPENAI and os.environ.get("OPENAI_API_KEY"):
-        return call_openai(model, history, system_prompt, round, max_output_tokens, reasoning_effort)
+        return call_openai(model, history, system_prompt, round, tool_choice, max_output_tokens, reasoning_effort)
 
     return {
         "error_msg": f"missing API key: {provider}"
@@ -27,7 +27,7 @@ def call_model(
 def call_openai(       
         model:str, history:list, 
         system_prompt:str,
-        round:int,
+        round:int, tool_choice:bool,
         max_output_tokens:int = 128, 
         reasoning_effort:str = "none"
     ):
@@ -38,7 +38,7 @@ def call_openai(
             input=history,
             instructions=system_prompt,
             tools=tools,
-            tool_choice="auto",
+            tool_choice=tool_choice,
             reasoning={"effort":reasoning_effort},
             max_output_tokens=max_output_tokens,
             store=False

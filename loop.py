@@ -56,6 +56,11 @@ Your scope is limited to:
 - career-related reasoning
 - tasks supported by the tools available to you
 
+Current execution state:
+- round: {round}
+- tool step: {step}/{max_step}
+
+
 Rules:
 - Do not answer requests unrelated to internships, jobs, careers, or your available tools.
 - For out-of-scope requests, briefly explain that the request is outside your scope and redirect the user to an internship-related task.
@@ -85,7 +90,7 @@ def conversation_loop(
         response = call_model(
             provider, model, 
             adapt_provider_format(provider, history), 
-            construct_system_prompt(), round
+            construct_system_prompt(), round, "auto"
         )
         if isinstance(response, dict) and response.get("error_msg"):
             #  place holder
@@ -104,10 +109,14 @@ def conversation_loop(
                     step += 1
 
                     history.extend(tool_outputs)
+                    if step == max_step:
+                        tool_choice = "none"
+                    else:
+                        tool_choice = "auto"
                     response = call_model(
                         provider, model, 
                         adapt_provider_format(provider, history), 
-                        construct_system_prompt(), round
+                        construct_system_prompt(), round, tool_choice
                     )
                     history.append(response)
                 else:
