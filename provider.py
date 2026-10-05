@@ -78,7 +78,7 @@ def tool_output_OpenAI(output:ToolOutput):
     return {
         "type": "function_call_output",
         "call_id": output.call_id,
-        "output": json.dump(output.output)
+        "output": json.dumps(output.output)
     }
 
 def format_tool_output(tool_outputs:ToolOutput, provider: ModelProvider):

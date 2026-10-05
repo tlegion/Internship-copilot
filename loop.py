@@ -76,7 +76,7 @@ def conversation_loop(provider:ModelProvider= ModelProvider.OPENAI, model:str= "
             adapt_provider_format(provider, history), 
             construct_system_prompt(), round
         )
-        if getattr(response, "error_msg", None):
+        if isinstance(response, dict) and response.get("error_msg"):
             #  place holder
             history.append(response)
             continue
@@ -84,14 +84,25 @@ def conversation_loop(provider:ModelProvider= ModelProvider.OPENAI, model:str= "
         history.append(response)
 
         if tool_calls := getattr(response, "tool_calls", None):
+            round += 1
             tool_outputs= tool_loop(tool_calls, provider, round)
 
             history.extend(tool_outputs)
-            response = call_model(
-                provider, model, 
-                adapt_provider_format(provider, history), 
-                construct_system_prompt(), round
-            )
+
+            while round <= max_round:
+                round += 1
+                response = call_model(
+                    provider, model, 
+                    adapt_provider_format(provider, history), 
+                    construct_system_prompt(), round
+                )
+                history.append(response)
+                if tool_calls := getattr(response, "tool_calls", None):
+                    round += 1
+                    tool_outputs= tool_loop(tool_calls, provider, round)
+                    history.extend(tool_outputs)
+
+
 
 
         round += 1
