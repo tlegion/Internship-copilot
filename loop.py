@@ -13,7 +13,7 @@ load_dotenv(Path(__file__).with_name('.env'))
 
 
 
-def tool_loop(tool_calls:list[ModelToolCall], provider:ModelProvider, round:int,  max_tool_call:int = 10):
+def tool_loop(tool_calls:list[ModelToolCall], provider:ModelProvider, round:int, step:int, max_tool_call:int = 10):
     tool_outputs:list[ToolOutput] = []
     call_count = 0
     for call in tool_calls:
@@ -22,7 +22,8 @@ def tool_loop(tool_calls:list[ModelToolCall], provider:ModelProvider, round:int,
             tool_name=call.tool_name,
             call_id=call.call_id,
             output=result,
-            round= round
+            round= round,
+            step=step
         ))
         call_count += 1
         if call_count >= max_tool_call:
@@ -61,7 +62,7 @@ Rules:
 """.strip()
 
 
-def conversation_loop(provider:ModelProvider= ModelProvider.OPENAI, model:str= "gpt-6-luna", max_round:int = 10):
+def conversation_loop(provider:ModelProvider= ModelProvider.OPENAI, model:str= "gpt-6-luna", max_round:int = 10, max_step:int = 3):
     history = []
     user_ended = False
     round = 1
@@ -84,23 +85,31 @@ def conversation_loop(provider:ModelProvider= ModelProvider.OPENAI, model:str= "
         history.append(response)
 
         if tool_calls := getattr(response, "tool_calls", None):
-            round += 1
-            tool_outputs= tool_loop(tool_calls, provider, round)
+            step = 1
+            tool_outputs= tool_loop(tool_calls, provider, round, step)
 
             history.extend(tool_outputs)
+            response = call_model(
+                provider, model, 
+                adapt_provider_format(provider, history), 
+                construct_system_prompt(), round
+            )
 
-            while round <= max_round:
-                round += 1
+            while step <= max_step:
+
+                history.append(response)
+                if tool_calls := getattr(response, "tool_calls", None):
+                    step += 1
+                    tool_outputs= tool_loop(tool_calls, provider, round, step)
+                    history.extend(tool_outputs)
+                else:
+                    break
+
                 response = call_model(
                     provider, model, 
                     adapt_provider_format(provider, history), 
                     construct_system_prompt(), round
                 )
-                history.append(response)
-                if tool_calls := getattr(response, "tool_calls", None):
-                    round += 1
-                    tool_outputs= tool_loop(tool_calls, provider, round)
-                    history.extend(tool_outputs)
 
 
 
