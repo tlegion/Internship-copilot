@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Any
 from provider import call_model, format_tool_output, format_user_input, load_tool_arguments
 from tool_call import run_tool
-from conversation import get_user_input
+from conversation import get_user_input, display_history
 
 load_dotenv(Path(__file__).with_name('.env'))
 
@@ -109,13 +109,14 @@ def adapt_provider_format(provider:ModelProvider, history:list):
 
 
 
-def conversation_loop(provider:ModelProvider, model:str= "gpt-6-luna", max_round:int = 10):
+def conversation_loop(provider:ModelProvider= ModelProvider.OPENAI, model:str= "gpt-6-luna", max_round:int = 10):
     history = []
     user_ended = False
     round = 0
 
 
     while not user_ended and round <= max_round:
+        display_history(history)
         input = get_user_input()
         response = call_model(provider, model, adapt_provider_format(provider, history))
         if getattr(response, "error_msg", None):
