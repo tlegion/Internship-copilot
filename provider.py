@@ -56,7 +56,7 @@ def call_openai(
         if item.type == "function_call":
             tool_calls.append(ModelToolCall(
                 tool_name=item.name,
-                arguments=item.arguments,
+                arguments=json.loads(item.arguments),
                 call_id= item.call_id
             ))
 

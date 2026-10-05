@@ -74,6 +74,6 @@ class ToolOutput:
         self.tool_name = tool_name
         self.call_id = call_id
         self.output = output
-        self.round = round,
+        self.round = round
         self.step = step
 
