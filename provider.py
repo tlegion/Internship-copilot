@@ -72,7 +72,7 @@ def call_openai(
 
 def load_tool_arguments(arguments, provider: ModelProvider):
     if provider == ModelProvider.OPENAI:
-        return json.loads(arguments)
+        return arguments
 
 def tool_output_OpenAI(output:ToolOutput):
     return {

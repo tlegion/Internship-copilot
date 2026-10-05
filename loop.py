@@ -68,7 +68,11 @@ Rules:
 """.strip()
 
 
-def conversation_loop(provider:ModelProvider= ModelProvider.OPENAI, model:str= "gpt-6-luna", max_round:int = 10, max_step:int = 3):
+def conversation_loop(
+        provider:ModelProvider= ModelProvider.OPENAI, 
+        model:str= "gpt-6-luna", 
+        max_round:int = 10, max_step:int = 3
+    ):
     history = []
     user_ended = False
     round = 1
@@ -92,31 +96,22 @@ def conversation_loop(provider:ModelProvider= ModelProvider.OPENAI, model:str= "
 
         if tool_calls := getattr(response, "tool_calls", None):
             step = 1
-            tool_outputs= tool_loop(tool_calls, provider, round, step)
-
-            history.extend(tool_outputs)
-            response = call_model(
-                provider, model, 
-                adapt_provider_format(provider, history), 
-                construct_system_prompt(), round
-            )
-
             while step <= max_step:
 
-                history.append(response)
                 if tool_calls := getattr(response, "tool_calls", None):
-                    step += 1
+                    
                     tool_outputs= tool_loop(tool_calls, provider, round, step)
+                    step += 1
+
                     history.extend(tool_outputs)
+                    response = call_model(
+                        provider, model, 
+                        adapt_provider_format(provider, history), 
+                        construct_system_prompt(), round
+                    )
+                    history.append(response)
                 else:
                     break
-
-                response = call_model(
-                    provider, model, 
-                    adapt_provider_format(provider, history), 
-                    construct_system_prompt(), round
-                )
-
 
 
 
