@@ -218,3 +218,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local SQLite runtime data
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+# macOS
+.DS_Store
