@@ -1,46 +1,35 @@
-from models import ModelProvider, ModelResponse, ModelToolCall, UserInput, ToolOutput
+from models import ModelResponse, UserInput, ToolOutput
 
-def display_history(history: list):
-    current_round = None
-    model_step = 0
 
-    print("\n========== HISTORY ==========")
+def display_item(item):
+    if isinstance(item, UserInput):
+        print(f"[User] {item.text}")
 
-    for item in history:
-        item_round = getattr(item, "round", None)
+    elif isinstance(item, ModelResponse):
+        if item.text:
+            print(f"\n[Assistant] {item.text}")
 
-        if item_round != current_round:
-            current_round = item_round
-            model_step = 0
-            print(f"\n--- Round {current_round} ---")
-
-        if isinstance(item, UserInput):
-            print(f"[User] {item.text}")
-
-        elif isinstance(item, ModelResponse):
-            model_step += 1
-            print(f"[Model Step {model_step}]")
-
-            if item.text:
-                print(f"  Text: {item.text}")
-
-            for call in item.tool_calls:
-                print(
-                    f"  Tool Call: {call.tool_name}"
-                    f" | call_id={call.call_id}"
-                    f" | args={call.arguments}"
-                )
-
-        elif isinstance(item, ToolOutput):
+        for call in item.tool_calls:
             print(
-                f"[Tool Output] {item.tool_name}"
-                f" | call_id={item.call_id}"
-                f" | output={item.output}"
+                f"\n[Tool Call] {call.tool_name}"
+                f"\n  call_id: {call.call_id}"
+                f"\n  args: {call.arguments}"
             )
 
-    print("=============================\n")
+    elif isinstance(item, ToolOutput):
+        print(
+            f"\n[Tool Output] {item.tool_name}"
+            f"\n  call_id: {item.call_id}"
+            f"\n  output: {item.output}"
+        )
 
-def get_user_input(round:int) -> UserInput:
-    user_input = input("Enter your prompt:")
+    elif isinstance(item, dict) and item.get("error_msg"):
+        print(f"\n[Runtime Error] {item['error_msg']}")
+
+
+def get_user_input(round: int) -> UserInput:
+    user_input = input("\nEnter your prompt: ")
     return UserInput(user_input, None, round=round)
+
+
 

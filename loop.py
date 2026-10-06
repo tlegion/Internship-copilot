@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Any
 from provider import call_model, format_tool_output, format_user_input, load_tool_arguments
 from tool_call import run_tool, tool_list, tools
-from conversation import get_user_input, display_history
+from conversation import get_user_input, display_item
 from models import ModelProvider, ModelResponse, ModelToolCall, UserInput, ToolOutput
 
 load_dotenv(Path(__file__).with_name('.env'))
@@ -88,7 +88,6 @@ def conversation_loop(
 
 
     while not user_ended and round <= max_round:
-        display_history(history)
         user_input = get_user_input(round)
         history.append(user_input)
         response = call_model(
@@ -99,6 +98,7 @@ def conversation_loop(
         if isinstance(response, dict) and response.get("error_msg"):
             #  place holder
             history.append(response)
+            display_item(response)
             continue
 
         history.append(response)
@@ -113,6 +113,8 @@ def conversation_loop(
                     step += 1
 
                     history.extend(tool_outputs)
+                    for output in tool_outputs:
+                        display_item(output)
                     if step == max_step:
                         tool_choice = "none"
                     else:
@@ -123,6 +125,7 @@ def conversation_loop(
                         construct_system_prompt(), round, tool_choice
                     )
                     history.append(response)
+                    display_item(response)
                 else:
                     break
 
