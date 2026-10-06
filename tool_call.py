@@ -1,6 +1,6 @@
 from tools.jobs import lookup_job, create_job
 import json
-from conversation import request_tool_approval
+from approval import request_tool_approval
 
 tool_list= {
     "lookup_job": {

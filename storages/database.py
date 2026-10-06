@@ -111,7 +111,8 @@ def check_exists(
             AND company = ?
             AND description = ?
             AND location = ?
-            """
+            """,
+            (title, company, description, location)
         ).fetchall()
         return True if rows else False
     finally:
