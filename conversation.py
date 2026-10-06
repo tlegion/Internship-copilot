@@ -27,9 +27,10 @@ def display_item(item):
         print(f"\n[Runtime Error] {item['error_msg']}")
 
 
-def get_user_input(round: int) -> UserInput:
-    user_input = input("\nEnter your prompt: ")
+def get_user_input(round: int) -> UserInput | None:
+    user_input = input("\nEnter your prompt: ").strip()
+
+    if user_input.lower() in {"exit", "quit"}:
+        return None
+
     return UserInput(user_input, None, round=round)
-
-
-

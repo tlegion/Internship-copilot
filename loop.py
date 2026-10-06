@@ -89,6 +89,9 @@ def conversation_loop(
 
     while not user_ended and round <= max_round:
         user_input = get_user_input(round)
+
+        if user_input is None:
+            break
         history.append(user_input)
         response = call_model(
             provider, model, 
@@ -102,6 +105,8 @@ def conversation_loop(
             continue
 
         history.append(response)
+        display_item(response)
+
 
         if tool_calls := getattr(response, "tool_calls", None):
             step = 1
