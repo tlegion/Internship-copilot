@@ -1,5 +1,6 @@
 from tools.jobs import lookup_job, create_job
 import json
+from conversation import request_tool_approval
 
 tool_list= {
     "lookup_job": {
@@ -30,15 +31,21 @@ tools = [
     }
 ]
 
-def run_tool(tool_name, tool_input:dict):
+def run_tool(tool_name:str, tool_input:dict, call_id:str):
     tool = tool_list.get(tool_name)
 
     if tool:
-        if tool["requires_approval"]:
-            if 
+        if tool["requires_approval"] and not request_tool_approval(tool_name, tool_input, call_id):
+            return {
+                "success": False,
+                "error_msg": f"Authorization error: User approval failed for {tool_name} at {call_id} with arguments {tool_input}"
+            }
         return tool(**tool_input)
     else:
-        return { "error_msg": f"tool name not found: {tool_name}" }
+        return { 
+            "success": False,
+            "error_msg": f"tool name not found: {tool_name}" 
+        }
 
 
 

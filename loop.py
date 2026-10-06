@@ -17,7 +17,11 @@ def tool_loop(tool_calls:list[ModelToolCall], provider:ModelProvider, round:int,
     tool_outputs:list[ToolOutput] = []
     call_count = 0
     for call in tool_calls:
-        result= run_tool(call.tool_name, load_tool_arguments(call.arguments, provider))
+        result= run_tool(
+            call.tool_name, 
+            load_tool_arguments(call.arguments, provider),
+            call.call_id
+        )
         tool_outputs.append(ToolOutput(
             tool_name=call.tool_name,
             call_id=call.call_id,
