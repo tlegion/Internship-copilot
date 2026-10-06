@@ -19,7 +19,7 @@ def init_db():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     schema_sql = SCHEMA_PATH.read_text(encoding="utf-8")
-    seed_sql = SCHEMA_PATH.read_text(encoding="utf-8")
+    seed_sql = SEED_PATH.read_text(encoding="utf-8")
 
     connection = sqlite3.connect(DB_PATH)
 
@@ -32,6 +32,7 @@ def init_db():
 
             {seed_sql}
 
+            PRAGMA user_version = 1;
             COMMIT;
             """
         )
