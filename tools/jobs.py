@@ -60,6 +60,7 @@ def create_job(
     new_id = new_job_id()
     if new_id.get("error_msg", None):
         return new_id
+    new_id = new_id["job_id"]
     
     return insert_job(new_id,title,company, description, location)
     

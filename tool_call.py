@@ -1,13 +1,17 @@
-from tools.jobs import lookup_job
+from tools.jobs import lookup_job, create_job
 import json
 
 tool_list= {
-    "lookup_job": lookup_job,
+    "lookup_job": {
+        "handler": lookup_job,
+        "requires_approval": False
+    },
+    "create_job": {
+        "handler": create_job,
+        "requires_approval": True
+    }
 }
 
-requires_approval{
-
-}
 
 tools = [
     {
@@ -23,14 +27,15 @@ tools = [
             "additionalProperties": False,
         },
         "strict": True,
-        "requires_approval": False,
     }
 ]
 
 def run_tool(tool_name, tool_input:dict):
     tool = tool_list.get(tool_name)
+
     if tool:
-        if 
+        if tool["requires_approval"]:
+            if 
         return tool(**tool_input)
     else:
         return { "error_msg": f"tool name not found: {tool_name}" }
