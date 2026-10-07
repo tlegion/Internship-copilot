@@ -1,0 +1,23 @@
+[
+  {
+    "evidence_id": "ev_backend_001",
+    "candidate_id": "candidate_001",
+    "source_id": "health_alerts_backend",
+    "category": "backend_engineering",
+    "text": "Built a Django REST backend for an AI-assisted health alerts application. The backend exposed API endpoints that accepted user location and date information, retrieved relevant alert data, and passed structured context to a generative AI component. Implemented validation for incoming request parameters and introduced caching to avoid repeating expensive retrieval work. During debugging, investigated an issue where geographic prefix matching returned incorrect records for some locations. Traced the problem through the request, service, and persistence layers, corrected the matching logic, and verified the result through repeatable API tests. The project provided practical experience with REST API design, backend debugging, persistent and in-memory caching, structured data retrieval, error handling, and integrating an external AI API into an application."
+  },
+  {
+    "evidence_id": "ev_ml_001",
+    "candidate_id": "candidate_001",
+    "source_id": "synthetic_face_research",
+    "category": "machine_learning",
+    "text": "Conducted experimental work on detecting AI-generated face images using deep learning models. Evaluated multiple detector checkpoints against synthetic images produced by different generative pipelines, including GAN-based and diffusion-based generators. Designed experiments to test whether detector performance generalized beyond the image distribution used during development. Measured performance using metrics such as AUC and average precision and compared detector behaviour under image transformations including JPEG compression, cropping, resizing, and changes to generator parameters. Maintained reproducible experiment configurations so results across models and datasets could be compared consistently. This work developed practical experience with PyTorch-based evaluation pipelines, model benchmarking, robustness testing, distribution shift, experimental design, and interpreting machine-learning metrics rather than relying only on raw classification accuracy."
+  },
+  {
+    "evidence_id": "ev_simulation_001",
+    "candidate_id": "candidate_001",
+    "source_id": "service_system_simulation",
+    "category": "systems_modelling",
+    "text": "Implemented a discrete-event simulation in Python to study a service system containing multiple servers, FIFO queues, customer redirection, and stochastic arrivals and service times. Compared different allocations of a fixed server capacity to understand how configuration choices affected system performance. Used seeded random workloads so experiments could be reproduced and compared fairly. Applied common random numbers across competing configurations to reduce experimental noise and used paired confidence intervals when analysing performance differences. The implementation required careful management of simulation events, queues, system state, and statistics collected over repeated runs. This project provided experience with queueing behaviour, stochastic systems, reproducible experimentation, quantitative performance analysis, and debugging stateful simulations where errors may only become visible after a long sequence of events."
+  }
+]
