@@ -228,6 +228,27 @@ def save_rag_index(chunks: list[dict], new_embeddings: list[dict]) -> None:
             """,
             embedding_rows,
         )
+
+        connection.execute(
+            """
+            DELETE FROM chunk_fts
+            """
+        )
+        fts_rows = [
+            (chunk["chunk_id"], chunk["text"],)
+            for chunk in chunks
+        ]
+        connection.executemany(
+            """
+            INSERT INTO chunk_fts (
+                chunk_id,
+                text
+            )
+            VALUES (?, ?)
+            """,
+            fts_rows,
+        )
+
         connection.commit()
     except sqlite3.Error as e:
         connection.rollback()

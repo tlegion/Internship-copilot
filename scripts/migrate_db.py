@@ -10,6 +10,7 @@ DB_PATH = DATA_DIR / "internship.db"
 MIGRATIONS = [
     ROOT / "sql" / "migrations" / "V000__initial.sql",
     ROOT / "sql" / "migrations" / "V001__add_rag_storage.sql",
+    ROOT / "sql" / "migrations" / "V002__add_chunk_fts.sql",
 ]
 
 LATEST_VERSION = len(MIGRATIONS)
