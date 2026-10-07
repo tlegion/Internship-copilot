@@ -111,22 +111,21 @@ def dense_search(
     for chunk in chunks:
         score = cosine_similarity(query_embedding, chunk["embedding"])
         results.append(
+            
             {
-                {
-                    "chunk_id": chunk["chunk_id"],
-                    "evidence_id": chunk["evidence_id"],
-                    "candidate_id": chunk["candidate_id"],
-                    "source_id": chunk["source_id"],
-                    "category": chunk["category"],
-                    "text": chunk["text"],
-                    "score": score,
-                }
+                "chunk_id": chunk["chunk_id"],
+                "evidence_id": chunk["evidence_id"],
+                "candidate_id": chunk["candidate_id"],
+                "source_id": chunk["source_id"],
+                "category": chunk["category"],
+                "text": chunk["text"],
+                "score": score,
             }
         )
 
     results.sort(
         key=lambda result:result["score"],
-        everse=True,
+        reverse=True,
     )
 
     return {

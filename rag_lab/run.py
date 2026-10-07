@@ -23,7 +23,8 @@ def storage_documents_embed(documents, storage_path:Path = EMBED_PATH):
     embed_text = adding_embeddings(chunks)
     if not embed_text["success"]:
         return embed_text
-    with open(storage_path, "w") as f:
+    embed_text = embed_text["chunks"]
+    with open(storage_path, "w", encoding="utf-8") as f:
         try:
             json.dump(embed_text, f, indent=4)
             return {
@@ -38,33 +39,32 @@ def storage_documents_embed(documents, storage_path:Path = EMBED_PATH):
     
 
 def load_documents_embed(storage_path:Path = EMBED_PATH):
-    with open(storage_path, "r") as f:
-        result = json.load(f)
-        try:
+    try:
+        with open(storage_path, "r", encoding="utf-8") as f:
             result = json.load(f)
             return {
                 "success": True,
                 "load_result": result,
             }
-        except Exception as e:
-            return {
-                "success": False,
-                "error_msg": str(e)
-            }
+    except Exception as e:
+        return {
+            "success": False,
+            "error_msg": str(e)
+        }
 
 
     
 
 def main():
-    # documents = load_documents()
+    documents = load_documents()
 
-    # chunks = chunk_documents(documents)
-    # texts = [
-    #     chunk["text"] for chunk in chunks
-    # ]
-    # embeddings = embedding_texts(texts)
+    chunks = chunk_documents(documents)
+    texts = [
+        chunk["text"] for chunk in chunks
+    ]
+    embeddings = embedding_texts(texts)
 
-    # storage_documents_embed(documents)
+    storage_documents_embed(documents)
 
     evidence_embed = load_documents_embed()
     if evidence_embed['success']:
@@ -76,7 +76,7 @@ def main():
 
     search_results = dense_search(query_text, evidence_embed)
     if search_results["success"]:
-        for index, result in enumerate(search_results):
+        for index, result in enumerate(search_results["results"]):
             print(f'number {index}: {result["text"]}')
                   
 
