@@ -14,8 +14,8 @@ def content_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def sync_rag_index(candidate_id: str | None = None) -> dict:
-    documents = get_evidence_documents(candidate_id)
+def sync_rag_index() -> dict:
+    documents = get_evidence_documents()
     chunks = chunk_documents(documents)
     hash_to_text = {}
     for chunk in chunks:

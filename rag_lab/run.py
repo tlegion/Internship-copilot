@@ -13,7 +13,7 @@ from storages.database import load_indexed_chunks
 
 def main():
     try:
-        sync_result = sync_rag_index(candidate_id="candidate_001")
+        sync_result = sync_rag_index()
         print(
             f"documents={sync_result['documents']} chunks={sync_result['chunks']} "
             f"cached={sync_result['cached_embeddings']} new={sync_result['new_embeddings']}"
