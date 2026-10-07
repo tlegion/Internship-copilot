@@ -12,8 +12,8 @@ import tiktoken
 DATA_PATH = Path(__file__).parent / "data" / "evidence.json"
 
 def load_documents() -> list[dict]:
-  with DATA_PATH.open("r", encoding="utf-8") as f:
-      return json.load(f)
+    with DATA_PATH.open("r", encoding="utf-8") as f:
+        return json.load(f)
 
 def main():
     documents = load_documents()
@@ -59,11 +59,11 @@ def main():
             f"part {index}: "
             f"{count_tokens(part)} tokens"
         )
-  # assert len(documents) == 3
-  # assert len(chunks) == 12
+    # assert len(documents) == 3
+    # assert len(chunks) == 12
 
-  # assert all(chunk["text"] for chunk in chunks)
-  # assert all(chunk["candidate_id"] == "candidate_001" for chunk in chunks)
+    # assert all(chunk["text"] for chunk in chunks)
+    # assert all(chunk["candidate_id"] == "candidate_001" for chunk in chunks)
 
 
 if __name__ == "__main__":
