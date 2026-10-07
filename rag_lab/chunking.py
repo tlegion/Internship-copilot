@@ -11,7 +11,7 @@ def count_tokens(text:str) ->int:
     return len(ENCODING.encode(text))
 
 def split_by_tokens(text:str, max_token:int) -> list[str]:
-    tokens = ENCODING(text)
+    tokens = ENCODING.encode(text)
     chunks = []
 
     for start in range(0, len(tokens), max_token):
@@ -60,7 +60,10 @@ def split_long_paragraph(
 
     return chunks
 
-def chunk_document(document:dict[str, Any], max_tokens:int) -> list[dict[str, Any]]:
+def chunk_document(
+        document:dict[str, Any], 
+        max_tokens:int=MAX_CHUNK_TOKEN) -> list[dict[str, Any]
+]:
     paragraphs = [
         paragraph.strip() for paragraph in document["text"].split("\n\n")
         if paragraph.strip()
@@ -83,7 +86,7 @@ def chunk_document(document:dict[str, Any], max_tokens:int) -> list[dict[str, An
             )
 
 
-    for index, paragraph in enumerate(paragraphs):
+    for index, text in enumerate(chunk_texts):
         chunk = {
             "chunk_id": f"{document['evidence_id']}_chunk_{index:03d}",
             "evidence_id": document["evidence_id"],
@@ -91,7 +94,7 @@ def chunk_document(document:dict[str, Any], max_tokens:int) -> list[dict[str, An
             "source_id": document["source_id"],
             "category": document["category"],
             "date": document.get("date"),
-            "text": paragraph,
+            "text": text,
         }
 
         chunks.append(chunk)
@@ -100,8 +103,9 @@ def chunk_document(document:dict[str, Any], max_tokens:int) -> list[dict[str, An
 
 def chunk_documents(
         documents:list[dict[str, Any]],
+        max_tokens:int = MAX_CHUNK_TOKEN,
 ) -> list[dict[str, Any]]:
     chunks = []
     for document in documents:
-        chunks.extend(chunk_document(document))
+        chunks.extend(chunk_document(document, max_tokens))
     return chunks

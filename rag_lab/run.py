@@ -1,12 +1,15 @@
 import json
 from pathlib import Path
 
-from chunking import chunk_documents
+from chunking import (
+    MAX_CHUNK_TOKEN,
+    chunk_documents,
+    count_tokens,
+    split_long_paragraph,
+)
 import tiktoken
 
 DATA_PATH = Path(__file__).parent / "data" / "evidence.json"
-
-encoding = tiktoken.get_encoding("cl100k_base")
 
 def load_documents() -> list[dict]:
   with DATA_PATH.open("r", encoding="utf-8") as f:
@@ -23,8 +26,7 @@ def main():
 
   for chunk in chunks:
     word_count = len(chunk["text"].split())
-    token_count = len(encoding.encode(chunk["text"]))
-
+    token_count = count_tokens(chunk["text"])
     print(
         f"{chunk['chunk_id']} "
         f"| source={chunk['source_id']} "
@@ -33,6 +35,30 @@ def main():
     )
     print(chunk["text"])
     print("-" * 80)
+
+    print("\n=== long paragraph fallback test ===")
+
+    first_paragraph = documents[0]["text"].split("\n\n")[0]
+
+    long_paragraph = " ".join(
+        [first_paragraph] * 10
+    )
+
+    print(
+        "long paragraph tokens:",
+        count_tokens(long_paragraph),
+    )
+
+    parts = split_long_paragraph(
+        long_paragraph,
+        max_tokens=MAX_CHUNK_TOKEN,
+    )
+
+    for index, part in enumerate(parts):
+        print(
+            f"part {index}: "
+            f"{count_tokens(part)} tokens"
+        )
   # assert len(documents) == 3
   # assert len(chunks) == 12
 
