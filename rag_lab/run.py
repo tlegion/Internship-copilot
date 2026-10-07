@@ -16,49 +16,49 @@ def load_documents() -> list[dict]:
       return json.load(f)
 
 def main():
-  documents = load_documents()
+    documents = load_documents()
 
-  chunks = chunk_documents(documents)
-  
-  print(f"documents: {len(documents)}")
-  print(f"chunks: {len(chunks)}")
-  print()
+    chunks = chunk_documents(documents)
+    
+    print(f"documents: {len(documents)}")
+    print(f"chunks: {len(chunks)}")
+    print()
 
-  for chunk in chunks:
-    word_count = len(chunk["text"].split())
-    token_count = count_tokens(chunk["text"])
-    print(
-        f"{chunk['chunk_id']} "
-        f"| source={chunk['source_id']} "
-        f"| words={word_count} "
-        f"| tokens={token_count}"
+    for chunk in chunks:
+        word_count = len(chunk["text"].split())
+        token_count = count_tokens(chunk["text"])
+        print(
+            f"{chunk['chunk_id']} "
+            f"| source={chunk['source_id']} "
+            f"| words={word_count} "
+            f"| tokens={token_count}"
+        )
+        print(chunk["text"])
+        print("-" * 80)
+
+    print("\n=== long paragraph fallback test ===")
+
+    first_paragraph = documents[0]["text"].split("\n\n")[0]
+
+    long_paragraph = " ".join(
+        [first_paragraph] * 10
     )
-    print(chunk["text"])
-    print("-" * 80)
 
-print("\n=== long paragraph fallback test ===")
-
-first_paragraph = documents[0]["text"].split("\n\n")[0]
-
-long_paragraph = " ".join(
-    [first_paragraph] * 10
-)
-
-print(
-    "long paragraph tokens:",
-    count_tokens(long_paragraph),
-)
-
-parts = split_long_paragraph(
-    long_paragraph,
-    max_tokens=MAX_CHUNK_TOKEN,
-)
-
-for index, part in enumerate(parts):
     print(
-        f"part {index}: "
-        f"{count_tokens(part)} tokens"
+        "long paragraph tokens:",
+        count_tokens(long_paragraph),
     )
+
+    parts = split_long_paragraph(
+        long_paragraph,
+        max_tokens=MAX_CHUNK_TOKEN,
+    )
+
+    for index, part in enumerate(parts):
+        print(
+            f"part {index}: "
+            f"{count_tokens(part)} tokens"
+        )
   # assert len(documents) == 3
   # assert len(chunks) == 12
 
