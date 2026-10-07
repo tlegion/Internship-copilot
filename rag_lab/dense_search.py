@@ -44,6 +44,31 @@ def adding_embeddings(
     if not embedding_results["success"]:
         return embedding_results
 
+    embeddings = embedding_results["embeddings"]
+
+    if len(chunks) != len(embeddings):
+        return {
+            "success": False,
+            "error_msg": (
+                "Number of chunks and embeddings do not match."
+            ),
+        }
+
+    result = []
+    for chunk, embedding in zip(chunks, embeddings, strict = True):
+        result.append(
+            {
+                **chunk,
+                "embedding": embedding
+            }
+        )
+
+    return {
+        "success": True,
+        "chunks": result
+    }
+
+
 def cosine_similarity(
         vector_a: list[float],
         vector_b: list[float],
@@ -71,16 +96,9 @@ def cosine_similarity(
 def dense_search(
         query: str,
         chunks: list[dict],
-        chunk_embeddings: list[list[float]],
         top_k: int = 3,
 ) -> dict:
-    if len(chunks) != len(chunk_embeddings):
-        return {
-            "success": False,
-            "error_msg": (
-                "Number of chunks and embeddings do not match."
-            ),
-        }
+
     query_result = embedding_texts([query])
 
     if not query_result["success"]:
@@ -89,11 +107,34 @@ def dense_search(
     query_embedding = query_result["embedding"][0]
 
     results = []
-    for chunk, chunk_embeddings in zip(
-        chunks,
-        chunk_embeddings,
-        strict=True
+
+    for chunk in chunks:
+        score = cosine_similarity(query_embedding, chunk["embedding"])
+        results.append(
+            {
+                {
+                    "chunk_id": chunk["chunk_id"],
+                    "evidence_id": chunk["evidence_id"],
+                    "candidate_id": chunk["candidate_id"],
+                    "source_id": chunk["source_id"],
+                    "category": chunk["category"],
+                    "text": chunk["text"],
+                    "score": score,
+                }
+            }
+        )
+
+    results.sort(
+        key=lambda result:result["score"],
+        everse=True,
     )
+
+    return {
+        "success": True,
+        "results": results[:top_k]
+    }
+
+
 
 
 # if __name__ == "__main__":
