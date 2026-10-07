@@ -33,6 +33,17 @@ def embedding_texts(
             "error_msg": str(e)
         }
 
+
+def adding_embeddings(
+        chunks: list[dict],
+) -> dict:
+    texts = [chunk["text"] for chunk in chunks]
+
+    embedding_results = embedding_texts(texts)
+
+    if not embedding_results["success"]:
+        return embedding_results
+
 def cosine_similarity(
         vector_a: list[float],
         vector_b: list[float],
