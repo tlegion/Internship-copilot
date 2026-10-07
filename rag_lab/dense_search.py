@@ -44,7 +44,7 @@ def adding_embeddings(
     if not embedding_results["success"]:
         return embedding_results
 
-    embeddings = embedding_results["embeddings"]
+    embeddings = embedding_results["embedding"]
 
     if len(chunks) != len(embeddings):
         return {
