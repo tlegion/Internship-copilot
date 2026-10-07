@@ -89,6 +89,7 @@ def chunk_document(
         chunk = {
             "chunk_id": f"{document['evidence_id']}_chunk_{index:03d}",
             "evidence_id": document["evidence_id"],
+            "chunk_index": index,
             "candidate_id": document["candidate_id"],
             "source_id": document["source_id"],
             "category": document["category"],

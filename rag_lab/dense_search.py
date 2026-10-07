@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from openai import OpenAI, APIError
 from errors import ProviderError
 
-from chunking import EMBEDDING_MODEL
+from rag_lab.chunking import EMBEDDING_MODEL
 import math
 import os
 

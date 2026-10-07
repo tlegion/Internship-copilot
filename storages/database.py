@@ -1,3 +1,4 @@
+import json
 import sqlite3
 
 from pathlib import Path
@@ -147,6 +148,123 @@ def get_last_job() -> dict | None:
         raise StorageError(f"Unable to load last job: {e}") from e
     finally:
         connection.close()
+
+def get_evidence_documents(candidate_id: str | None = None) -> list[dict]:
+    connection = db_connection_ro()
+    try:
+        query = """
+            SELECT evidence_id, candidate_id, source_id, category, date, text
+            FROM evidence
+        """
+        parameters = ()
+        if candidate_id is not None:
+            query += " WHERE candidate_id = ?"
+            parameters = (candidate_id,)
+        query += " ORDER BY evidence_id"
+        return [dict(row) for row in connection.execute(query, parameters)]
+    except sqlite3.Error as e:
+        raise StorageError(f"Unable to load evidence documents: {e}") from e
+    finally:
+        connection.close()
+
+
+def get_cached_embedding_hashes(
+    content_hashes: list[str], embedding_model: str
+) -> set[str]:
+    if not content_hashes:
+        return set()
+
+    connection = db_connection_ro()
+    try:
+        placeholders = ", ".join("?" for _ in content_hashes)
+        rows = connection.execute(
+            f"""
+            SELECT content_hash
+            FROM chunk_embeddings
+            WHERE embedding_model = ?
+              AND content_hash IN ({placeholders})
+            """,
+            (embedding_model, *content_hashes),
+        )
+        return {row["content_hash"] for row in rows}
+    except sqlite3.Error as e:
+        raise StorageError(f"Unable to look up cached embeddings: {e}") from e
+    finally:
+        connection.close()
+
+
+def save_rag_index(chunks: list[dict], new_embeddings: list[dict]) -> None:
+    chunk_rows = [
+        (
+            chunk["chunk_id"], chunk["evidence_id"], chunk["chunk_index"],
+            chunk["text"], chunk["content_hash"],
+        )
+        for chunk in chunks
+    ]
+    embedding_rows = [
+        (
+            item["content_hash"], item["embedding_model"], item["dimensions"],
+            json.dumps(item["embedding"]),
+        )
+        for item in new_embeddings
+    ]
+    connection = db_connection_rw()
+    try:
+        connection.execute("BEGIN")
+        connection.execute("DELETE FROM chunks")
+        connection.executemany(
+            """
+            INSERT INTO chunks (chunk_id, evidence_id, chunk_index, text, content_hash)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            chunk_rows,
+        )
+        connection.executemany(
+            """
+            INSERT INTO chunk_embeddings
+                (content_hash, embedding_model, dimensions, embedding)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(content_hash, embedding_model) DO NOTHING
+            """,
+            embedding_rows,
+        )
+        connection.commit()
+    except sqlite3.Error as e:
+        connection.rollback()
+        raise StorageError(f"Unable to save RAG index: {e}") from e
+    finally:
+        connection.close()
+
+
+def load_indexed_chunks(
+    embedding_model: str, candidate_id: str | None = None
+) -> list[dict]:
+    connection = db_connection_ro()
+    try:
+        query = """
+            SELECT c.chunk_id, c.evidence_id, e.candidate_id, e.source_id,
+                   e.category, e.date, c.text, ce.embedding
+            FROM chunks c
+            JOIN evidence e ON e.evidence_id = c.evidence_id
+            JOIN chunk_embeddings ce
+              ON ce.content_hash = c.content_hash AND ce.embedding_model = ?
+        """
+        parameters = (embedding_model,)
+        if candidate_id is not None:
+            query += " WHERE e.candidate_id = ?"
+            parameters += (candidate_id,)
+        query += " ORDER BY c.evidence_id, c.chunk_index"
+        result = []
+        for row in connection.execute(query, parameters):
+            chunk = dict(row)
+            chunk["embedding"] = json.loads(chunk["embedding"])
+            result.append(chunk)
+        return result
+    except (sqlite3.Error, json.JSONDecodeError) as e:
+        raise StorageError(f"Unable to load indexed chunks: {e}") from e
+    finally:
+        connection.close()
+
 
 if __name__ == "__main__":
     # print(get_all_jobs()) 

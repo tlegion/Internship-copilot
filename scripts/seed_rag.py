@@ -52,6 +52,13 @@ def seed_rag():
                 text
             )
             VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(evidence_id)
+            DO UPDATE SET
+                candidate_id = excluded.candidate_id,
+                source_id = excluded.source_id,
+                category = excluded.category,
+                date = excluded.date,
+                text = excluded.text
             """,
             rows,
         )
@@ -66,7 +73,7 @@ def seed_rag():
         connection.close()
 
     print(
-        f"Seeded {len(rows)} evidence documents."
+        f"Seeded/synced {len(rows)} evidence documents."
     )
 
 

@@ -1,10 +1,13 @@
 import sqlite3
+import sys
 from pathlib import Path
-
-from migrate_db import migrate_db
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from scripts.migrate_db import migrate_db
+from scripts.seed_rag import seed_rag
 
 DATA_DIR = ROOT / "data"
 DB_PATH = DATA_DIR / "internship.db"
@@ -51,6 +54,8 @@ def init_db():
 
         finally:
             connection.close()
+
+        seed_rag()
 
     except Exception:
         DB_PATH.unlink(missing_ok=True)
