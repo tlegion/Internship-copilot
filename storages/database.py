@@ -16,6 +16,9 @@ def db_connection_ro():
             f"file:{DB_PATH}?mode=ro",
             uri=True,
         )
+        connection.execute(
+            "PRAGMA foreign_keys = ON"
+        )
     except sqlite3.Error as e:
         raise StorageError(f"Unable to open database: {e}") from e
     connection.row_factory = sqlite3.Row
@@ -26,6 +29,9 @@ def db_connection_rw():
         connection = sqlite3.connect(
             f"file:{DB_PATH}?mode=rw",
             uri=True,
+        )
+        connection.execute(
+            "PRAGMA foreign_keys = ON"
         )
     except sqlite3.Error as e:
         raise StorageError(f"Unable to open database: {e}") from e
