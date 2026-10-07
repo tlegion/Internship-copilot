@@ -8,6 +8,7 @@ from chunking import (
     split_long_paragraph,
 )
 import tiktoken
+from dense_search import embedding_texts
 
 DATA_PATH = Path(__file__).parent / "data" / "evidence.json"
 
@@ -19,10 +20,17 @@ def main():
     documents = load_documents()
 
     chunks = chunk_documents(documents)
-    
+    texts = [
+        chunk["text"] for chunk in chunks
+    ]
+    embeddings = embedding_texts(texts)
+
     print(f"documents: {len(documents)}")
     print(f"chunks: {len(chunks)}")
     print()
+    print(f"embeddings: {len(embeddings["embedding"])}")
+    print(f"dimensions: {len(embeddings["embedding"][0])}") 
+    
 
     for chunk in chunks:
         word_count = len(chunk["text"].split())
