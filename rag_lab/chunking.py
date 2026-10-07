@@ -62,8 +62,8 @@ def split_long_paragraph(
 
 def chunk_document(
         document:dict[str, Any], 
-        max_tokens:int=MAX_CHUNK_TOKEN) -> list[dict[str, Any]
-]:
+        max_tokens:int=MAX_CHUNK_TOKEN
+) -> list[dict[str, Any]]:
     paragraphs = [
         paragraph.strip() for paragraph in document["text"].split("\n\n")
         if paragraph.strip()
