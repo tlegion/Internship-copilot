@@ -51,14 +51,18 @@ def main():
     try:
         documents = load_documents()
 
-        storage_documents_embed(documents)
+        # storage_documents_embed(documents)
 
         evidence_embed = load_documents_embed()
-        query_text = "What was the job that requires SQL skill"
+        query_text = "do I know API skills?"
 
         search_results = dense_search(query_text, evidence_embed)
+        print(f"SQL query line: {query_text}")
         for index, result in enumerate(search_results):
-            print(f'number {index}: {result["text"]}')
+            print(
+                f'number {index}: score:{result["score"]}\n',
+                f'{result["text"]}'
+            )
     except HarnessError as e:
         print(f"[Runtime Error] {e}")
         return
