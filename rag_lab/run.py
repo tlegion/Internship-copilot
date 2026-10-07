@@ -36,29 +36,29 @@ def main():
     print(chunk["text"])
     print("-" * 80)
 
-    print("\n=== long paragraph fallback test ===")
+print("\n=== long paragraph fallback test ===")
 
-    first_paragraph = documents[0]["text"].split("\n\n")[0]
+first_paragraph = documents[0]["text"].split("\n\n")[0]
 
-    long_paragraph = " ".join(
-        [first_paragraph] * 10
-    )
+long_paragraph = " ".join(
+    [first_paragraph] * 10
+)
 
+print(
+    "long paragraph tokens:",
+    count_tokens(long_paragraph),
+)
+
+parts = split_long_paragraph(
+    long_paragraph,
+    max_tokens=MAX_CHUNK_TOKEN,
+)
+
+for index, part in enumerate(parts):
     print(
-        "long paragraph tokens:",
-        count_tokens(long_paragraph),
+        f"part {index}: "
+        f"{count_tokens(part)} tokens"
     )
-
-    parts = split_long_paragraph(
-        long_paragraph,
-        max_tokens=MAX_CHUNK_TOKEN,
-    )
-
-    for index, part in enumerate(parts):
-        print(
-            f"part {index}: "
-            f"{count_tokens(part)} tokens"
-        )
   # assert len(documents) == 3
   # assert len(chunks) == 12
 
