@@ -32,3 +32,12 @@ CREATE TABLE chunk_embeddings (
         embedding_model
     )
 );
+
+CREATE INDEX idx_evidence_candidate_id
+ON evidence(candidate_id);
+
+CREATE INDEX idx_chunks_evidence_id
+ON chunks(evidence_id);
+
+CREATE INDEX idx_chunks_content_hash
+ON chunks(content_hash);
