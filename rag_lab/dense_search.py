@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from chunking import EMBEDDING_MODEL
+import math
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
@@ -15,7 +16,7 @@ client = OpenAI()
 
 def embedding_texts(
         texts: list[str],
-) -> list[list[float]]:
+) -> dict:
     try:
         response = client.embeddings.create(
             model = EMBEDDING_MODEL,
@@ -31,6 +32,58 @@ def embedding_texts(
             "success": False,
             "error_msg": str(e)
         }
+
+def cosine_similarity(
+        vector_a: list[float],
+        vector_b: list[float],
+) -> float:
+    if len(vector_a) != len(vector_b):
+        raise ValueError("Embedding dimensions do not match.")
+
+    dot_product = sum(
+        a*b for a,b in zip(vector_a, vector_b)
+    )
+
+    norm_a = math.sqrt(
+        sum(a * a for a in vector_a)
+    )
+
+    norm_b = math.sqrt(
+        sum(b * b for b in vector_b)
+    )
+
+    if norm_a == 0 or norm_b == 0:
+        raise ValueError("cannot compare zero vectors")
+
+    return dot_product / (norm_a * norm_b)
+
+def dense_search(
+        query: str,
+        chunks: list[dict],
+        chunk_embeddings: list[list[float]],
+        top_k: int = 3,
+) -> dict:
+    if len(chunks) != len(chunk_embeddings):
+        return {
+            "success": False,
+            "error_msg": (
+                "Number of chunks and embeddings do not match."
+            ),
+        }
+    query_result = embedding_texts([query])
+
+    if not query_result["success"]:
+        return query_result
+
+    query_embedding = query_result["embedding"][0]
+
+    results = []
+    for chunk, chunk_embeddings in zip(
+        chunks,
+        chunk_embeddings,
+        strict=True
+    )
+
 
 # if __name__ == "__main__":
     # print(embedding_texts(input()))

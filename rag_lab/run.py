@@ -24,6 +24,7 @@ def main():
         chunk["text"] for chunk in chunks
     ]
     embeddings = embedding_texts(texts)
+    
 
     print(f"documents: {len(documents)}")
     print(f"chunks: {len(chunks)}")
