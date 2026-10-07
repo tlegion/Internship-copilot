@@ -1,6 +1,7 @@
 from tools.jobs import lookup_job, create_job
 import json
 from approval import request_tool_approval
+from errors import HarnessError
 
 tool_list= {
     "lookup_job": {
@@ -81,7 +82,17 @@ def run_tool(tool_name:str, tool_input:dict, call_id:str):
                 "success": False,
                 "error_msg": f"Authorization error: User approval failed for {tool_name} at {call_id} with arguments {tool_input}"
             }
-        return tool["handler"](**tool_input)
+        try:
+            result = tool["handler"](**tool_input)
+        except HarnessError as error:
+            return {
+                "success": False,
+                "error_msg": str(error)
+            }
+        return {
+            "success": True,
+            "result": result
+        }
     else:
         return { 
             "success": False,

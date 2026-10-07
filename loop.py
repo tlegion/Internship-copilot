@@ -8,6 +8,7 @@ from provider import call_model, format_tool_output, format_user_input, load_too
 from tool_call import run_tool, tool_list, tools
 from conversation import get_user_input, display_item
 from models import ModelProvider, ModelResponse, ModelToolCall, UserInput, ToolOutput
+from errors import HarnessError
 
 load_dotenv(Path(__file__).with_name('.env'))
 
@@ -93,13 +94,14 @@ def conversation_loop(
         if user_input is None:
             break
         history.append(user_input)
-        response = call_model(
-            provider, model, 
-            adapt_provider_format(provider, history), 
-            construct_system_prompt(), round, "auto"
-        )
-        if isinstance(response, dict) and response.get("error_msg"):
-            #  place holder
+        try:
+            response = call_model(
+                provider, model,
+                adapt_provider_format(provider, history),
+                construct_system_prompt(), round, "auto"
+            )
+        except HarnessError as error:
+            response = {"error_msg": str(error)}
             history.append(response)
             display_item(response)
             continue
@@ -124,11 +126,17 @@ def conversation_loop(
                         tool_choice = "none"
                     else:
                         tool_choice = "auto"
-                    response = call_model(
-                        provider, model, 
-                        adapt_provider_format(provider, history), 
-                        construct_system_prompt(), round, tool_choice
-                    )
+                    try:
+                        response = call_model(
+                            provider, model,
+                            adapt_provider_format(provider, history),
+                            construct_system_prompt(), round, tool_choice
+                        )
+                    except HarnessError as error:
+                        response = {"error_msg": str(error)}
+                        history.append(response)
+                        display_item(response)
+                        break
                     history.append(response)
                     display_item(response)
                 else:

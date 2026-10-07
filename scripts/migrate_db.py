@@ -22,7 +22,7 @@ def migrate_db():
             f'Database does not exist: {DB_PATH}'
         )
 
-    connection = sqlite3.connection(DB_PATH)
+    connection = sqlite3.connect(DB_PATH)
 
     try:
         current_version = get_db_version(connection)

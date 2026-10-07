@@ -1,5 +1,10 @@
 import json
 from pathlib import Path
+import sys
+
+# Keep the shared runtime error available when running this file directly.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from errors import HarnessError
 
 from chunking import (
     MAX_CHUNK_TOKEN,
@@ -15,69 +20,54 @@ EMBED_PATH = DATA_PATH.with_name("embed_text.json")
 
 
 def load_documents() -> list[dict]:
-    with DATA_PATH.open("r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with DATA_PATH.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError, UnicodeError) as e:
+        raise HarnessError(f"Unable to load documents from {DATA_PATH}: {e}") from e
 
-def storage_documents_embed(documents, storage_path:Path = EMBED_PATH):
+def storage_documents_embed(documents, storage_path:Path = EMBED_PATH) -> Path:
     chunks = chunk_documents(documents)
     embed_text = adding_embeddings(chunks)
-    if not embed_text["success"]:
-        return embed_text
-    embed_text = embed_text["chunks"]
-    with open(storage_path, "w", encoding="utf-8") as f:
-        try:
+    try:
+        with open(storage_path, "w", encoding="utf-8") as f:
             json.dump(embed_text, f, indent=4)
-            return {
-                "success": True,
-                "storage_path": storage_path,
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error_msg": str(e)
-            }
+    except OSError as e:
+        raise HarnessError(f"Unable to store embeddings at {storage_path}: {e}") from e
+    return storage_path
     
 
-def load_documents_embed(storage_path:Path = EMBED_PATH):
+def load_documents_embed(storage_path:Path = EMBED_PATH) -> list[dict]:
     try:
         with open(storage_path, "r", encoding="utf-8") as f:
-            result = json.load(f)
-            return {
-                "success": True,
-                "load_result": result,
-            }
-    except Exception as e:
-        return {
-            "success": False,
-            "error_msg": str(e)
-        }
+            return json.load(f)
+    except (OSError, json.JSONDecodeError, UnicodeError) as e:
+        raise HarnessError(f"Unable to load embeddings from {storage_path}: {e}") from e
 
 
     
 
 def main():
-    documents = load_documents()
+    try:
+        documents = load_documents()
 
-    chunks = chunk_documents(documents)
-    texts = [
-        chunk["text"] for chunk in chunks
-    ]
-    embeddings = embedding_texts(texts)
+        chunks = chunk_documents(documents)
+        texts = [
+            chunk["text"] for chunk in chunks
+        ]
+        embeddings = embedding_texts(texts)
 
-    storage_documents_embed(documents)
+        storage_documents_embed(documents)
 
-    evidence_embed = load_documents_embed()
-    if evidence_embed['success']:
-        evidence_embed = evidence_embed["load_result"]
-    else:
-        print("1", evidence_embed)
-        return
-    query_text = "What was the job that requires SQL skill"
+        evidence_embed = load_documents_embed()
+        query_text = "What was the job that requires SQL skill"
 
-    search_results = dense_search(query_text, evidence_embed)
-    if search_results["success"]:
-        for index, result in enumerate(search_results["results"]):
+        search_results = dense_search(query_text, evidence_embed)
+        for index, result in enumerate(search_results):
             print(f'number {index}: {result["text"]}')
+    except HarnessError as e:
+        print(f"[Runtime Error] {e}")
+        return
                   
 
     # search_results = dense_search(query_text, embed_text)

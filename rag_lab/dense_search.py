@@ -1,58 +1,47 @@
 from pathlib import Path
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import OpenAI, APIError
+from errors import HarnessError
 
 from chunking import EMBEDDING_MODEL
 import math
+import os
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
 load_dotenv(ROOT_DIR / ".env")
 
-client = OpenAI()
 
 
 
 def embedding_texts(
         texts: list[str],
-) -> dict:
+) -> list[list[float]]:
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise HarnessError("missing API key: OpenAI embeddings")
+    client = OpenAI()
     try:
         response = client.embeddings.create(
             model = EMBEDDING_MODEL,
             input=texts,
         )
 
-        return {
-            "embedding" : [item.embedding for item in response.data],
-            "success": True
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error_msg": str(e)
-        }
+    except APIError as e:
+        raise HarnessError(str(e)) from e
+
+    return [item.embedding for item in response.data]
 
 
 def adding_embeddings(
         chunks: list[dict],
-) -> dict:
+) -> list[dict]:
     texts = [chunk["text"] for chunk in chunks]
 
-    embedding_results = embedding_texts(texts)
-
-    if not embedding_results["success"]:
-        return embedding_results
-
-    embeddings = embedding_results["embedding"]
+    embeddings = embedding_texts(texts)
 
     if len(chunks) != len(embeddings):
-        return {
-            "success": False,
-            "error_msg": (
-                "Number of chunks and embeddings do not match."
-            ),
-        }
+        raise HarnessError("Number of chunks and embeddings do not match.")
 
     result = []
     for chunk, embedding in zip(chunks, embeddings, strict = True):
@@ -63,10 +52,7 @@ def adding_embeddings(
             }
         )
 
-    return {
-        "success": True,
-        "chunks": result
-    }
+    return result
 
 
 def cosine_similarity(
@@ -97,14 +83,9 @@ def dense_search(
         query: str,
         chunks: list[dict],
         top_k: int = 3,
-) -> dict:
+) -> list[dict]:
 
-    query_result = embedding_texts([query])
-
-    if not query_result["success"]:
-        return query_result
-
-    query_embedding = query_result["embedding"][0]
+    query_embedding = embedding_texts([query])[0]
 
     results = []
 
@@ -128,10 +109,7 @@ def dense_search(
         reverse=True,
     )
 
-    return {
-        "success": True,
-        "results": results[:top_k]
-    }
+    return results[:top_k]
 
 
 

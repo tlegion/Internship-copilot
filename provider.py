@@ -6,6 +6,7 @@ from openai import OpenAI, APIError
 import os
 import json
 from tool_call import tools
+from errors import HarnessError
 
 def call_model(
         provider: ModelProvider, 
@@ -19,9 +20,7 @@ def call_model(
     if provider == ModelProvider.OPENAI and os.environ.get("OPENAI_API_KEY"):
         return call_openai(model, history, system_prompt, round, tool_choice, max_output_tokens, reasoning_effort)
 
-    return {
-        "error_msg": f"missing API key: {provider}"
-    }
+    raise HarnessError(f"missing API key: {provider}")
 
     
 def call_openai(       
@@ -44,11 +43,7 @@ def call_openai(
             store=False
         )
     except APIError as error:
-        return { 
-            "error_msg": error.message,
-            "error_body": error.body,
-            "code": error.code
-        }
+        raise HarnessError(error.message) from error
 
     tool_calls:list[ModelToolCall] = []
 
