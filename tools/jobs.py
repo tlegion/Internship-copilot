@@ -7,7 +7,7 @@ from storages.database import (
 )
 import re
 import sqlite3
-from errors import HarnessError
+from errors import ToolError
 
 # JOBS = {
 #     "job_001": {
@@ -22,7 +22,7 @@ def lookup_job(job_id:str):
 
     job = get_job(job_id)
     if job is None:
-        raise HarnessError(f"Job not found: {job_id}")
+        raise ToolError(f"Job not found: {job_id}")
     return job
 
 def new_job_id():
@@ -31,11 +31,9 @@ def new_job_id():
         last_id = re.search(r"\d+", last)
         last_id_int = int(last_id.group())
         new_id_int = last_id_int + 1
-        return {
-            "job_id" : f"job_{new_id_int:03d}"
-            }
+        return f"job_{new_id_int:03d}"
     else:
-        raise HarnessError("No job exists")
+        raise ToolError("No job exists")
     
 
 
@@ -46,9 +44,8 @@ def create_job(
         location: str | None,
 ) -> dict:
     if check_exists(title, company, description, location):
-        raise HarnessError("job already exists")
+        raise ToolError("job already exists")
     new_id = new_job_id()
-    new_id = new_id["job_id"]
     
     return insert_job(new_id,title,company, description, location)
     

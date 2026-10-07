@@ -2,7 +2,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI, APIError
-from errors import HarnessError
+from errors import ProviderError
 
 from chunking import EMBEDDING_MODEL
 import math
@@ -19,7 +19,7 @@ def embedding_texts(
         texts: list[str],
 ) -> list[list[float]]:
     if not os.environ.get("OPENAI_API_KEY"):
-        raise HarnessError("missing API key: OpenAI embeddings")
+        raise ProviderError("missing API key: OpenAI embeddings")
     client = OpenAI()
     try:
         response = client.embeddings.create(
@@ -28,7 +28,7 @@ def embedding_texts(
         )
 
     except APIError as e:
-        raise HarnessError(str(e)) from e
+        raise ProviderError(str(e)) from e
 
     return [item.embedding for item in response.data]
 
@@ -41,7 +41,7 @@ def adding_embeddings(
     embeddings = embedding_texts(texts)
 
     if len(chunks) != len(embeddings):
-        raise HarnessError("Number of chunks and embeddings do not match.")
+        raise ProviderError("Number of chunks and embeddings do not match.")
 
     result = []
     for chunk, embedding in zip(chunks, embeddings, strict = True):

@@ -4,7 +4,7 @@ import sys
 
 # Keep the shared runtime error available when running this file directly.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from errors import HarnessError
+from errors import HarnessError, StorageError
 
 from chunking import (
     MAX_CHUNK_TOKEN,
@@ -13,7 +13,7 @@ from chunking import (
     split_long_paragraph,
 )
 import tiktoken
-from dense_search import embedding_texts, adding_embeddings,dense_search
+from dense_search import adding_embeddings,dense_search
 
 DATA_PATH = Path(__file__).parent / "data" / "evidence.json"
 EMBED_PATH = DATA_PATH.with_name("embed_text.json")
@@ -24,7 +24,7 @@ def load_documents() -> list[dict]:
         with DATA_PATH.open("r", encoding="utf-8") as f:
             return json.load(f)
     except (OSError, json.JSONDecodeError, UnicodeError) as e:
-        raise HarnessError(f"Unable to load documents from {DATA_PATH}: {e}") from e
+        raise StorageError(f"Unable to load documents from {DATA_PATH}: {e}") from e
 
 def storage_documents_embed(documents, storage_path:Path = EMBED_PATH) -> Path:
     chunks = chunk_documents(documents)
@@ -33,7 +33,7 @@ def storage_documents_embed(documents, storage_path:Path = EMBED_PATH) -> Path:
         with open(storage_path, "w", encoding="utf-8") as f:
             json.dump(embed_text, f, indent=4)
     except OSError as e:
-        raise HarnessError(f"Unable to store embeddings at {storage_path}: {e}") from e
+        raise StorageError(f"Unable to store embeddings at {storage_path}: {e}") from e
     return storage_path
     
 
@@ -42,7 +42,7 @@ def load_documents_embed(storage_path:Path = EMBED_PATH) -> list[dict]:
         with open(storage_path, "r", encoding="utf-8") as f:
             return json.load(f)
     except (OSError, json.JSONDecodeError, UnicodeError) as e:
-        raise HarnessError(f"Unable to load embeddings from {storage_path}: {e}") from e
+        raise StorageError(f"Unable to load embeddings from {storage_path}: {e}") from e
 
 
     
@@ -50,12 +50,6 @@ def load_documents_embed(storage_path:Path = EMBED_PATH) -> list[dict]:
 def main():
     try:
         documents = load_documents()
-
-        chunks = chunk_documents(documents)
-        texts = [
-            chunk["text"] for chunk in chunks
-        ]
-        embeddings = embedding_texts(texts)
 
         storage_documents_embed(documents)
 

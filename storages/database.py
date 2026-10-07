@@ -1,7 +1,7 @@
 import sqlite3
 
 from pathlib import Path
-from errors import HarnessError
+from errors import StorageError
 
 
 DB_PATH = (
@@ -17,7 +17,7 @@ def db_connection_ro():
             uri=True,
         )
     except sqlite3.Error as e:
-        raise HarnessError(f"Unable to open database: {e}") from e
+        raise StorageError(f"Unable to open database: {e}") from e
     connection.row_factory = sqlite3.Row
     return connection
 
@@ -28,7 +28,7 @@ def db_connection_rw():
             uri=True,
         )
     except sqlite3.Error as e:
-        raise HarnessError(f"Unable to open database: {e}") from e
+        raise StorageError(f"Unable to open database: {e}") from e
     connection.row_factory = sqlite3.Row
     return connection
 
@@ -48,7 +48,7 @@ def get_job(job_id: str) -> dict | None:
 
         return dict(row) if row is not None else None
     except sqlite3.Error as e:
-        raise HarnessError(f"Unable to look up job {job_id}: {e}") from e
+        raise StorageError(f"Unable to look up job {job_id}: {e}") from e
     finally:
         connection.close()
 
@@ -73,7 +73,7 @@ def get_all_jobs() -> dict | None:
             for row in rows
         ]
     except sqlite3.Error as e:
-        raise HarnessError(f"Unable to load jobs: {e}") from e
+        raise StorageError(f"Unable to load jobs: {e}") from e
     finally:
         connection.close()
 
@@ -98,7 +98,7 @@ def insert_job(
     except sqlite3.Error as e:
         connection.rollback()
 
-        raise HarnessError(f"Job creation failed: {e}") from e
+        raise StorageError(f"Job creation failed: {e}") from e
     finally:
         connection.close()
 
@@ -121,7 +121,7 @@ def check_exists(
         ).fetchall()
         return True if rows else False
     except sqlite3.Error as e:
-        raise HarnessError(f"Unable to check whether job exists: {e}") from e
+        raise StorageError(f"Unable to check whether job exists: {e}") from e
     finally:
         connection.close()
 
@@ -138,7 +138,7 @@ def get_last_job() -> dict | None:
         ).fetchone()
         return row[0] if row else None
     except sqlite3.Error as e:
-        raise HarnessError(f"Unable to load last job: {e}") from e
+        raise StorageError(f"Unable to load last job: {e}") from e
     finally:
         connection.close()
 

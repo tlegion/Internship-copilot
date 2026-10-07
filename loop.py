@@ -102,7 +102,6 @@ def conversation_loop(
             )
         except HarnessError as error:
             response = {"error_msg": str(error)}
-            history.append(response)
             display_item(response)
             continue
 
@@ -134,7 +133,6 @@ def conversation_loop(
                         )
                     except HarnessError as error:
                         response = {"error_msg": str(error)}
-                        history.append(response)
                         display_item(response)
                         break
                     history.append(response)

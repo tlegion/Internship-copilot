@@ -80,14 +80,16 @@ def run_tool(tool_name:str, tool_input:dict, call_id:str):
         if tool["requires_approval"] and not request_tool_approval(tool_name, tool_input, call_id):
             return {
                 "success": False,
-                "error_msg": f"Authorization error: User approval failed for {tool_name} at {call_id} with arguments {tool_input}"
+                "error_msg": f"Authorization error: User approval failed for {tool_name} at {call_id} with arguments {tool_input}",
+                "error_type": "ToolError"
             }
         try:
             result = tool["handler"](**tool_input)
         except HarnessError as error:
             return {
                 "success": False,
-                "error_msg": str(error)
+                "error_msg": str(error),
+                "error_type": type(error).__name__
             }
         return {
             "success": True,
@@ -96,7 +98,8 @@ def run_tool(tool_name:str, tool_input:dict, call_id:str):
     else:
         return { 
             "success": False,
-            "error_msg": f"tool name not found: {tool_name}" 
+            "error_msg": f"tool name not found: {tool_name}",
+            "error_type": "ToolError"
         }
 
 
