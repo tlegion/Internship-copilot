@@ -55,8 +55,8 @@ def adapt_provider_format(provider:ModelProvider, history:list):
 
     return formatted
 
-def construct_system_prompt():
-    return """
+def construct_system_prompt(round:int, step:int, max_round:int, max_step:int):
+    return f"""
 You are an internship assistant agent.
 
 Your scope is limited to:
@@ -67,7 +67,7 @@ Your scope is limited to:
 - tasks supported by the tools available to you
 
 Current execution state:
-- round: {round}
+- round: {round}/{max_round}
 - tool step: {step}/{max_step}
 
 
@@ -103,7 +103,7 @@ def conversation_loop(
             response = call_model(
                 provider, model,
                 adapt_provider_format(provider, history),
-                construct_system_prompt(), round, "auto"
+                construct_system_prompt(round, max_round, 0, max_step), round, "auto"
             )
         except HarnessError as error:
             response = {"error_msg": str(error)}
@@ -134,7 +134,8 @@ def conversation_loop(
                         response = call_model(
                             provider, model,
                             adapt_provider_format(provider, history),
-                            construct_system_prompt(), round, tool_choice
+                            construct_system_prompt(round, max_round, step, max_step),
+                            round, tool_choice
                         )
                     except HarnessError as error:
                         response = {"error_msg": str(error)}
