@@ -17,22 +17,27 @@ load_dotenv(Path(__file__).with_name('.env'))
 def tool_loop(tool_calls:list[ModelToolCall], provider:ModelProvider, round:int, step:int, max_tool_call:int = 10):
     tool_outputs:list[ToolOutput] = []
     call_count = 0
-    for call in tool_calls:
-        result= run_tool(
-            call.tool_name, 
-            load_tool_arguments(call.arguments, provider),
-            call.call_id
-        )
+    for index, call in enumerate(tool_calls):
+        if index >= max_tool_call:
+            result = {
+                "success": False,
+                "error_type": "ToolBudgetExceeded",
+                "error_msg": "Tool call limit exceeded"
+            }
+        else:
+            result = run_tool(
+                call.tool_name,
+                load_tool_arguments(call.arguments, provider),
+                call.call_id
+            )
+
         tool_outputs.append(ToolOutput(
             tool_name=call.tool_name,
             call_id=call.call_id,
             output=result,
-            round= round,
+            round=round,
             step=step
         ))
-        call_count += 1
-        if call_count >= max_tool_call:
-            break
     return tool_outputs
 
 
@@ -121,7 +126,7 @@ def conversation_loop(
                     history.extend(tool_outputs)
                     for output in tool_outputs:
                         display_item(output)
-                    if step == max_step:
+                    if step > max_step:
                         tool_choice = "none"
                     else:
                         tool_choice = "auto"

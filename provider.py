@@ -13,7 +13,7 @@ def call_model(
         model:str, history:list, 
         system_prompt:str,
         round:int, tool_choice:str = "auto",
-        max_output_tokens:int = 128, 
+        max_output_tokens:int = 1024, 
         reasoning_effort:str = "none",
     ):
     load_dotenv(Path(__file__).with_name(".env"))
@@ -27,7 +27,7 @@ def call_openai(
         model:str, history:list, 
         system_prompt:str,
         round:int, tool_choice:bool,
-        max_output_tokens:int = 128, 
+        max_output_tokens:int = 1024, 
         reasoning_effort:str = "none"
     ):
     client =OpenAI(timeout=30, max_retries=1)
@@ -46,6 +46,14 @@ def call_openai(
         raise ProviderError(error.message) from error
 
     tool_calls:list[ModelToolCall] = []
+    if response.status != "completed":
+        details = response.incomplete_details
+        reason = details.reason if details else None
+
+        raise ProviderError(
+            f"Model response incomplete: "
+            f"status={response.status}, reason={reason}"
+        )
 
     for item in response.output:
         if item.type == "function_call":

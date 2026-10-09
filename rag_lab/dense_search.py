@@ -85,6 +85,9 @@ def dense_search(
         top_k: int = 3,
 ) -> list[dict]:
 
+    if not chunks:
+        return []
+
     query_embedding = embedding_texts([query])[0]
 
     results = []
