@@ -5,7 +5,7 @@ from errors import StorageError
 from storages.database import db_connection_ro
 
 def build_fts_query(query:str) -> str:
-    terms = re.findall("r\w+", query)
+    terms = re.findall(r"\w+", query)
 
     return " OR ".join((f'"{term}"' for term in terms))
 
@@ -20,7 +20,7 @@ def bm25_search( query:str, candidate_id:str | None = None, top_k:int = 3) ->lis
     try:
         sql = """
             SELECT
-                c.chunk_id
+                c.chunk_id,
                 c.evidence_id, 
                 e.candidate_id,
                 e.source_id,
@@ -31,6 +31,9 @@ def bm25_search( query:str, candidate_id:str | None = None, top_k:int = 3) ->lis
             
             JOIN chunks c
                 ON c.chunk_id = chunk_fts.chunk_id
+
+            JOIN evidence e
+                ON e.evidence_id = c.evidence_id
                 
             WHERE chunk_fts MATCH ?
         """
@@ -58,7 +61,7 @@ def bm25_search( query:str, candidate_id:str | None = None, top_k:int = 3) ->lis
 
     except sqlite3.Error as e:
         raise StorageError(
-            f"BM25 earch failed: {e}"
+            f"BM25 search failed: {e}"
         ) from e
     finally:
         connection.close()
