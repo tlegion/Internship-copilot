@@ -102,8 +102,12 @@ tools = [
                 "query": {
                     "type": "string",
                     "description": (
-                        "Standalone semantic search query representing "
-                        "the user's current retrieval intent."
+                        "Standalone semantic search query representing the user's current "
+                        "retrieval intent. The current evidence corpus is in English, so "
+                        "write this query in English even if the user speaks another language. "
+                        "Preserve the user's meaning and do not add unsupported facts. "
+                        "If the current user message depends on earlier conversation, include "
+                        "only the context needed to make the query standalone."
                     ),
                 },
                 "keywords": {
@@ -112,8 +116,11 @@ tools = [
                         "type": "string"
                     },
                     "description": (
-                        "Distinctive lexical search anchors. "
-                        "May be an empty list."
+                        "Distinctive English lexical search anchors for the current English "
+                        "evidence corpus. Preserve exact technical identifiers, API names, "
+                        "technology names, error codes, and code terms as written. "
+                        "Exclude generic conversational words. Do not invent likely answer "
+                        "terms. If there are no useful exact lexical anchors, use an empty list."
                     ),
                 },
                 "candidate_id": {

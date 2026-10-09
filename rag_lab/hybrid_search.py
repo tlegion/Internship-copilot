@@ -60,7 +60,7 @@ def hybrid_search(
     query: str,
     keywords: list[str] | None,
     candidate_id: str | None = None,
-    top_k: int = 3,
+    top_k: int = 10,
     retrieval_k: int = 10,
 ) -> list[dict]:
 
