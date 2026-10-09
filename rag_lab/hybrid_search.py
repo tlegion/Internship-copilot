@@ -3,12 +3,14 @@ from rag_lab.dense_search import dense_search
 from rag_lab.bm25_search import bm25_search
 from storages.database import load_indexed_chunks
 
+BM25_WEIGHT = 0.2
+DENSE_WEIGHT = 0.8
 
 def reciprocal_rank_fusion(
     dense_results: list[dict],
     bm25_results: list[dict],
     top_k: int = 3,
-    rank_constant: int = 60,
+    rank_constant: int = 0,
 ) -> list[dict]:
 
     fused = {}
@@ -24,7 +26,7 @@ def reciprocal_rank_fusion(
         }
 
         fused[chunk_id]["rrf_score"] += (
-            1 / (rank_constant + rank)
+            1 / (rank_constant + rank)* DENSE_WEIGHT
         )
 
     for rank, result in enumerate(bm25_results, start=1):
@@ -41,7 +43,7 @@ def reciprocal_rank_fusion(
             fused[chunk_id]["bm25_rank"] = rank
 
         fused[chunk_id]["rrf_score"] += (
-            1 / (rank_constant + rank)
+            1 / (rank_constant + rank) * BM25_WEIGHT
         )
 
     results = list(fused.values())
