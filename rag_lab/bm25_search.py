@@ -10,10 +10,10 @@ def build_fts_query(query:str) -> str:
     return " OR ".join((f'"{term}"' for term in terms))
 
 
-def bm25_search( query:str, candidate_id:str | None = None, top_k:int = 3) ->list[dict]:
-    fts_query = build_fts_query(query)
+def bm25_search( keywords:list[str], candidate_id:str | None = None, top_k:int = 3) ->list[dict]:
+    # fts_query = keywords
 
-    if not fts_query: return []
+    # if not fts_query: return []
 
     connection = db_connection_ro()
 
@@ -34,11 +34,13 @@ def bm25_search( query:str, candidate_id:str | None = None, top_k:int = 3) ->lis
 
             JOIN evidence e
                 ON e.evidence_id = c.evidence_id
-                
+
             WHERE chunk_fts MATCH ?
         """
 
-        parameter = [fts_query]
+        query = " OR ".join(f"{word}" for word in keywords)
+
+        parameter = [query]
 
         if candidate_id is not None:
             sql += """
