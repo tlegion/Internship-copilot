@@ -4,16 +4,41 @@ import re
 from errors import StorageError
 from storages.database import db_connection_ro
 
-def build_fts_query(query:str) -> str:
-    terms = re.findall(r"\w+", query)
+# def build_fts_query(query:str) -> str:
+#     terms = re.findall(r"\w+", query)
 
-    return " OR ".join((f'"{term}"' for term in terms))
+#     return " OR ".join((f'"{term}"' for term in terms))
 
+def build_fts_query(
+    keywords: list[str],
+) -> str:
+    phrases = []
+
+    for keyword in keywords:
+        keyword = keyword.strip()
+
+        if not keyword:
+            continue
+
+        escaped = keyword.replace(
+            '"',
+            '""',
+        )
+
+        phrases.append(
+            f'"{escaped}"'
+        )
+
+    return " OR ".join(phrases)
 
 def bm25_search( keywords:list[str], candidate_id:str | None = None, top_k:int = 3) ->list[dict]:
     # fts_query = keywords
 
-    # if not fts_query: return []
+    
+
+    keywords = build_fts_query(keywords)
+    if not keywords: return []   
+
 
     connection = db_connection_ro()
 
@@ -38,9 +63,9 @@ def bm25_search( keywords:list[str], candidate_id:str | None = None, top_k:int =
             WHERE chunk_fts MATCH ?
         """
 
-        query = " OR ".join(f"{word}" for word in keywords)
+        # query = " OR ".join(f"{word}" for word in keywords)
 
-        parameter = [query]
+        parameter = [keywords]
 
         if candidate_id is not None:
             sql += """

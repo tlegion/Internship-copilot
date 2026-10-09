@@ -2,6 +2,7 @@ from tools.jobs import lookup_job, create_job
 import json
 from approval import request_tool_approval
 from errors import HarnessError
+from tools.evidence import search_evidence_hybrid
 
 tool_list= {
     "lookup_job": {
@@ -11,7 +12,11 @@ tool_list= {
     "create_job": {
         "handler": create_job,
         "requires_approval": True
-    }
+    },
+    "search_evidence_hybrid": {
+        "handler": search_evidence_hybrid,
+        "requires_approval": False,
+    },
 }
 
 
@@ -67,6 +72,62 @@ tools = [
                 "company",
                 "description",
                 "location"
+            ],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "search_evidence_hybrid",
+        "description": (
+            "Search the candidate's evidence when answering questions "
+            "about their experience, skills, projects, or qualifications. "
+            "Use query as a standalone semantic description of the user's "
+            "current retrieval intent. If the user's current message is "
+            "already self-contained, preserve it closely. If it depends on "
+            "earlier conversation, include only the context needed to make "
+            "the query standalone. "
+            "keywords are lexical search anchors for exact matching. "
+            "Use only distinctive technical terms, technology names, "
+            "skills, identifiers, error codes, product names, or short "
+            "phrases relevant to the user's request. Exclude generic words "
+            "such as 'I', 'have', 'did', 'use', 'experience', and 'about'. "
+            "Do not invent terms that assume the answer. "
+            "If there are no useful exact lexical anchors, pass an empty list."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "Standalone semantic search query representing "
+                        "the user's current retrieval intent."
+                    ),
+                },
+                "keywords": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": (
+                        "Distinctive lexical search anchors. "
+                        "May be an empty list."
+                    ),
+                },
+                "candidate_id": {
+                    "type": "string",
+                    "description": (
+                        "Candidate whose evidence should be searched, "
+                        "for example candidate_001."
+                    ),
+                },
+            },
+            "required": [
+                "query",
+                "keywords",
+                "candidate_id",
             ],
             "additionalProperties": False,
         },
