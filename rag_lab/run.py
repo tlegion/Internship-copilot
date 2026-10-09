@@ -23,6 +23,7 @@ def main():
 
         results = hybrid_search(
             query_text,
+            keywords=["server", "setup", "chance", "effects", "aligned"]
             candidate_id="candidate_001",
             top_k=3,
         )
