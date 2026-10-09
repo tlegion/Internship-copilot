@@ -13,5 +13,5 @@ def search_evidence_hybrid(
         query=query,
         keywords=keywords,
         candidate_id=candidate_id,
-        top_k=3,
+        top_k=10,
     )
