@@ -76,7 +76,7 @@ def hybrid_search(
     )
 
     bm25_results = bm25_search(
-        query,
+        keywords,
         candidate_id=candidate_id,
         top_k=retrieval_k,
     )

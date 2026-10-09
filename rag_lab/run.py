@@ -17,13 +17,19 @@ def main():
     try:
         sync_result = sync_rag_index()
         query_text = (
-            "Did I use a technique to keep chance effects aligned "
-            "when comparing alternative server setups?"
+            "Do I have experience with PostgreSQL GROUP BY "
+            "and inspecting query plans?"
         )
+
+        keywords = [
+            "PostgreSQL",
+            "GROUP BY",
+            "query plans",
+        ]
 
         results = hybrid_search(
             query_text,
-            keywords=["server", "setup", "chance", "effects", "aligned",],
+            keywords,
             candidate_id="candidate_001",
             top_k=3,
         )
