@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from openai import OpenAI, APIError
 import os
 import json
-from tool_call import tools
+from tool_call import get_tool_schemas
 from errors import ProviderError
 
 def call_model(
@@ -15,10 +15,12 @@ def call_model(
         round:int, tool_choice:str = "auto",
         max_output_tokens:int = 1024, 
         reasoning_effort:str = "none",
+        *, catalog: dict | None = None, loaded_skills: set | None = None,
     ):
     load_dotenv(Path(__file__).with_name(".env"))
     if provider == ModelProvider.OPENAI and os.environ.get("OPENAI_API_KEY"):
-        return call_openai(model, history, system_prompt, round, tool_choice, max_output_tokens, reasoning_effort)
+        return call_openai(model, history, system_prompt, round, tool_choice, max_output_tokens, reasoning_effort,
+                           catalog=catalog, loaded_skills=loaded_skills)
 
     raise ProviderError(f"missing API key: {provider}")
 
@@ -28,7 +30,8 @@ def call_openai(
         system_prompt:str,
         round:int, tool_choice:bool,
         max_output_tokens:int = 1024, 
-        reasoning_effort:str = "none"
+        reasoning_effort:str = "none",
+        *, catalog: dict | None = None, loaded_skills: set | None = None,
     ):
     client =OpenAI(timeout=30, max_retries=1)
     try:
@@ -36,7 +39,7 @@ def call_openai(
             model=model,
             input=history,
             instructions=system_prompt,
-            tools=tools,
+            tools=get_tool_schemas(catalog, loaded_skills),
             tool_choice=tool_choice,
             reasoning={"effort":reasoning_effort},
             max_output_tokens=max_output_tokens,

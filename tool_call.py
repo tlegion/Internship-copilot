@@ -1,8 +1,9 @@
 from tools.jobs import lookup_job, create_job, list_jobs, search_jobs_hybrid
 import json
 from approval import request_tool_approval
-from errors import HarnessError
+from errors import HarnessError, ToolError
 from tools.evidence import search_evidence_hybrid
+from skill import load_skill, read_skill_resource
 
 tool_list= {
     "search_jobs_hybrid": {
@@ -210,8 +211,85 @@ tools = [
         "strict": True,
     }
 ]
-def run_tool(tool_name:str, tool_input:dict, call_id:str):
-    tool = tool_list.get(tool_name)
+
+
+
+BASE_TOOL_LIST = tool_list
+BASE_TOOL_SCHEMAS = tools
+
+# Developer-maintained executable registrations; Skill files cannot add these.
+SKILL_TOOL_LIST = {}
+SKILL_TOOL_SCHEMAS = {}
+
+
+def get_available_tools(catalog: dict | None = None, loaded_skills: set | None = None) -> dict:
+    catalog = catalog or {}
+    loaded = set(loaded_skills or ()) & catalog.keys()
+    available = BASE_TOOL_LIST.copy()
+    if catalog:
+        def load(name):
+            return load_skill(name, catalog)
+
+        available["load_skill"] = {
+            "handler": load,
+            "requires_approval": False,
+        }
+    if loaded:
+        def read(name, path):
+            return read_skill_resource(name, path, catalog, loaded)
+
+        available["read_skill_resource"] = {
+            "handler": read,
+            "requires_approval": False,
+        }
+    for name in sorted(loaded):
+        available.update(SKILL_TOOL_LIST.get(name, {}))
+    return available
+
+
+def get_tool_schemas(catalog: dict | None = None, loaded_skills: set | None = None) -> list[dict]:
+    catalog = catalog or {}
+    available = get_available_tools(catalog, loaded_skills)
+    schemas = BASE_TOOL_SCHEMAS.copy()
+    if catalog:
+        descriptions = "\n".join(f"{name}: {entry['description']}" for name, entry in sorted(catalog.items()))
+        schemas.append({
+            "type": "function",
+            "name": "load_skill",
+            "description": "Load relevant Skill instructions before using them. Available Skills:\n" + descriptions,
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string", "enum": sorted(catalog)}},
+                "required": ["name"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        })
+    loaded = set(loaded_skills or ()) & catalog.keys()
+    if loaded:
+        schemas.append({
+            "type": "function",
+            "name": "read_skill_resource",
+            "description": "Read a supporting UTF-8 text file inside an already loaded Skill. Scripts are text only and never execute.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "enum": sorted(loaded)},
+                    "path": {"type": "string", "description": "Relative path inside the Skill directory."},
+                },
+                "required": ["name", "path"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        })
+    for name in sorted(loaded):
+        schemas.extend(SKILL_TOOL_SCHEMAS.get(name, []))
+    return [schema for schema in schemas if schema["name"] in available]
+
+
+def run_tool(tool_name:str, tool_input:dict, call_id:str, *,
+             catalog: dict | None = None, loaded_skills: set | None = None):
+    tool = get_available_tools(catalog, loaded_skills).get(tool_name)
 
     if tool:
         if tool["requires_approval"] and not request_tool_approval(tool_name, tool_input, call_id):
@@ -221,6 +299,10 @@ def run_tool(tool_name:str, tool_input:dict, call_id:str):
                 "error_type": "ToolError"
             }
         try:
+            if tool_name in {"load_skill", "read_skill_resource"}:
+                expected = {"name"} if tool_name == "load_skill" else {"name", "path"}
+                if set(tool_input) != expected:
+                    raise ToolError(f"Invalid arguments for {tool_name}")
             result = tool["handler"](**tool_input)
         except HarnessError as error:
             return {
