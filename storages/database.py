@@ -149,7 +149,7 @@ def check_similar(
     try:
         for key in  key_enumerate:
             remaining = [k for k in key_enumerate if k != key]
-            where_str = " AND ".join(f"{k} = ?" for k in remaining)
+            where_str = " AND ".join(f"{k} IS ?" for k in remaining)
             where_str += f"AND {key} IS NOT ?"
             remaining_search = [search[k] for k in remaining]
             remaining_search.append(search[key])

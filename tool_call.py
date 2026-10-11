@@ -156,9 +156,11 @@ def run_tool(tool_name:str, tool_input:dict, call_id:str):
         except HarnessError as error:
             return {
                 "success": False,
-                "error_msg": str(error),
-                "error_type": type(error).__name__
+                "error_msg": str(error.args[0]),
+                "error_type": type(error).__name__,
+                "error_args": list(error.args[1:])
             }
+
         return {
             "success": True,
             "result": result
