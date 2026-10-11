@@ -103,7 +103,7 @@ def conversation_loop(
             response = call_model(
                 provider, model,
                 adapt_provider_format(provider, history),
-                construct_system_prompt(round, max_round, 0, max_step), round, "auto"
+                construct_system_prompt(round, 0, max_round, max_step), round, "auto"
             )
         except HarnessError as error:
             response = {"error_msg": str(error)}
@@ -134,7 +134,7 @@ def conversation_loop(
                         response = call_model(
                             provider, model,
                             adapt_provider_format(provider, history),
-                            construct_system_prompt(round, max_round, step, max_step),
+                            construct_system_prompt(round, step, max_round, max_step),
                             round, tool_choice
                         )
                     except HarnessError as error:

@@ -126,6 +126,29 @@ def check_exists(
             """,
             (title, company, description, location)
         ).fetchall()
+        return rows if rows else None
+    except sqlite3.Error as e:
+        raise StorageError(f"Unable to check whether job exists: {e}") from e
+    finally:
+        connection.close()
+
+
+def check_similar(
+        title:str, company:str, 
+        description:str, location:str
+):
+    connection = db_connection_ro()
+    try:
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM jobs
+            WHERE title = ?
+            AND company = ?
+            AND location = ?
+            """,
+            (title, company, location)
+        ).fetchall()
         return True if rows else False
     except sqlite3.Error as e:
         raise StorageError(f"Unable to check whether job exists: {e}") from e
