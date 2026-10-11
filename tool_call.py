@@ -1,10 +1,14 @@
-from tools.jobs import lookup_job, create_job, list_jobs
+from tools.jobs import lookup_job, create_job, list_jobs, search_jobs_hybrid
 import json
 from approval import request_tool_approval
 from errors import HarnessError
 from tools.evidence import search_evidence_hybrid
 
 tool_list= {
+    "search_jobs_hybrid": {
+        "handler": search_jobs_hybrid,
+        "requires_approval": False,
+    },
     "list_jobs": {
         "handler": list_jobs,
         "requires_approval": False,
@@ -25,6 +29,32 @@ tool_list= {
 
 
 tools = [
+    {
+        "type": "function",
+        "name": "search_jobs_hybrid",
+        "description": (
+            "Find stored jobs by natural-language role preferences, technologies and skills. "
+            "Use meaningful English semantic queries for English job records and distinctive "
+            "technical keywords for lexical retrieval. Rank is retrieval relevance, not candidate fit. "
+            "Use list_jobs for browsing with exact filters and pagination; lookup_job for one known ID. "
+            "Company and location are optional exact filters. An outdated index must be synchronized "
+            "by the developer before searching."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Nonempty English semantic search query."},
+                "keywords": {"type": "array", "items": {"type": "string"},
+                             "description": "Distinctive lexical anchors such as Python, RAG, LLM APIs; [] is allowed."},
+                "company": {"type": ["string", "null"], "description": "Exact company filter; null disables it."},
+                "location": {"type": ["string", "null"], "description": "Exact location filter; null disables it."},
+                "top_k": {"type": ["integer", "null"], "description": "Number of distinct jobs, 1 to 20; null defaults to 10."},
+            },
+            "required": ["query", "keywords", "company", "location", "top_k"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
     {
         "type": "function",
         "name": "list_jobs",

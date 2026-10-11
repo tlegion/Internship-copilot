@@ -54,6 +54,28 @@ def list_jobs(
     return get_jobs_page(limit, after_job_id, company, location)
 
 
+def search_jobs_hybrid(
+    query: str,
+    keywords: list[str],
+    company: str | None = None,
+    location: str | None = None,
+    top_k: int = 10,
+) -> dict:
+    if not isinstance(query, str) or not query.strip():
+        raise ToolError("query must be a nonempty natural-language string")
+    if not isinstance(keywords, list) or any(not isinstance(word, str) for word in keywords):
+        raise ToolError("keywords must be a list of strings")
+    for name, value in (("company", company), ("location", location)):
+        if value is not None and not isinstance(value, str):
+            raise ToolError(f"{name} must be a string or null")
+    if top_k is None:
+        top_k = 10
+    if type(top_k) is not int or not 1 <= top_k <= 20:
+        raise ToolError("top_k must be a positive integer no greater than 20")
+    from rag_lab.job_hybrid_search import hybrid_job_search
+    return hybrid_job_search(query, keywords, company, location, top_k)
+
+
 def new_job_id():
     last = get_last_job()
     if last:
