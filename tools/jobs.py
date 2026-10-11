@@ -10,10 +10,10 @@ import re
 import sqlite3
 from errors import ToolError
 
-from pathlib import Path
-ROOT = Path(__file__).parent[0]
-import sys
-sys.path.insert(0, ROOT)
+# from pathlib import Path
+# ROOT = Path(__file__).parent[0]
+# import sys
+# sys.path.insert(0, ROOT)
 import approval
 
 # JOBS = {
@@ -55,7 +55,7 @@ def create_job(
     similars = check_similar(title, company, description, location)
     if similars:
         
-        raise ToolError("similar job cached", similars)
+        
 
     new_id = new_job_id()
     

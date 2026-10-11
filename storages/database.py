@@ -122,7 +122,7 @@ def check_exists(
             WHERE title = ?
             AND company = ?
             AND description = ?
-            AND location = ?
+            AND location IS ?
             """,
             (title, company, description, location)
         ).fetchall()
@@ -150,7 +150,7 @@ def check_similar(
         for key in  key_enumerate:
             remaining = [k for k in key_enumerate if k != key]
             where_str = " AND ".join(f"{k} IS ?" for k in remaining)
-            where_str += f"AND {key} IS NOT ?"
+            where_str += f" AND {key} IS NOT ?"
             remaining_search = [search[k] for k in remaining]
             remaining_search.append(search[key])
             rows = connection.execute(

@@ -1,7 +1,8 @@
-def print_approval_details(tool_name:str, call_id:str, tool_input:dict):
+def print_approval_details(tool_name:str, tool_input:dict, call_id:str | None = None):
     print("\n========== APPROVAL REQUIRED ==========")
     print(f"Tool: {tool_name}")
-    print(f"Call ID: {call_id}")
+    if call_id:
+        print(f"Call ID: {call_id}")
     print("Arguments:")
 
     for key, value in tool_input.items():
@@ -13,7 +14,7 @@ def print_approval_details(tool_name:str, call_id:str, tool_input:dict):
 def request_tool_approval(
     tool_name: str,
     tool_input: dict,
-    call_id: str,
+    call_id: str | None = None,
 ) -> bool:
     print_approval_details(tool_name, call_id, tool_input)
 
