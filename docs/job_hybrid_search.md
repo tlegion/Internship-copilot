@@ -42,6 +42,12 @@ approximately 50 tokens of description overlap and paragraph/sentence boundaries
 when possible. Long descriptions repeat metadata; unusually large metadata is
 split with the whole document instead. Exact chunk texts have SHA-256 hashes.
 
+Chunking follows the Evidence chunker's paragraph/sentence grouping and token
+splitting. Job text keeps its original whitespace so freshness checks remain
+sensitive to description edits. Token slices back up only when they end inside
+a Unicode character. Overlap is simply the previous chunk's last approximately
+50 tokens; no binary boundary search is used.
+
 Synchronization generates one vector per uncached unique hash using
 `text-embedding-3-small`. It preserves the separate Job embedding cache. Chunk,
 FTS and cache writes commit together. The transaction rechecks its source job
@@ -69,7 +75,8 @@ existing cosine helper. FTS5 uses quoted keyword phrases joined with OR and orde
 by ascending raw `bm25()` scores; empty keywords skip that branch.
 
 RRF uses the Evidence weights (dense 0.8, BM25 0.2) and its initial rank constant
-of zero. Internal rows retain branch ranks/scores and fusion scores. All eligible
+of zero, by calling the existing `reciprocal_rank_fusion()` directly. Internal
+rows retain branch ranks/scores and fusion scores. All eligible
 chunks are retained before fusion and deduplication. The first fused appearance
 of each job determines its rank; `top_k` counts distinct jobs (default 10, maximum
 20). Joined original job metadata supplies full descriptions without per-job SQL
@@ -80,6 +87,8 @@ search; CPU/memory cost grows with the dataset. Synchronization sends missing
 texts through the existing embedding helper in one batch, so very large indexes
 may need future provider-aware batching. No relevance cutoff or LLM reranker is
 implemented. No new indexes or migration tables are necessary for this scale.
+Cache lookup uses the same parameterized `IN` query as Evidence indexing, in
+500-hash batches to stay below SQLite's bound-parameter limit.
 
 ## Automated checks
 

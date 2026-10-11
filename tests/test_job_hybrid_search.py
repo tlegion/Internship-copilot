@@ -141,6 +141,20 @@ class JobIndexTests(unittest.TestCase):
         self.assertEqual(self.execute("SELECT chunk_id, text FROM chunks_jobs ORDER BY chunk_id"),
                          self.execute("SELECT chunk_id, text FROM chunk_fts_jobs ORDER BY chunk_id"))
 
+    def test_cache_lookup_stays_below_sqlite_parameter_limit(self):
+        hashes = [f"hash_{index}" for index in range(1100)]
+        with closing(sqlite3.connect(self.path)) as connection, connection:
+            connection.executemany("INSERT INTO chunk_embeddings_jobs VALUES (?, ?, 2, '[1,0]')",
+                                   [(value, job_chunking.EMBEDDING_MODEL) for value in hashes])
+
+        def limited_connection():
+            connection = database.db_connection_ro()
+            connection.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 999)
+            return connection
+
+        with patch.object(job_index, "db_connection_ro", side_effect=limited_connection):
+            self.assertEqual(job_index.get_cached_job_hashes(hashes, job_chunking.EMBEDDING_MODEL), set(hashes))
+
     def test_evidence_tables_and_search_unchanged(self):
         tables = ("evidence", "chunks", "chunk_embeddings", "chunk_fts")
         before = [self.execute(f"SELECT * FROM {table}") for table in tables]
@@ -259,7 +273,7 @@ class JobIndexTests(unittest.TestCase):
                                   ({"location": "Sydney"}, {"job_001", "job_002", "job_003"}),
                                   ({"company": "Demo", "location": "Sydney"}, {"job_001", "job_003"})):
             with self.subTest(filters=filters):
-                dense, bm25 = job_index.load_job_search_data(job_chunking.EMBEDDING_MODEL, job_chunking.chunk_jobs,
+                dense, bm25 = job_index.load_job_search_data(job_chunking.EMBEDDING_MODEL,
                                                             '"Python"', filters.get("company"), filters.get("location"))
                 self.assertEqual({row["job_id"] for row in dense}, expected)
                 self.assertLessEqual({row["job_id"] for row in bm25}, expected)
@@ -281,7 +295,7 @@ class JobIndexTests(unittest.TestCase):
     def test_bm25_technical_keyword_and_safe_literals(self):
         self.sync()
         from rag_lab.bm25_search import build_fts_query
-        _, hits = job_index.load_job_search_data(job_chunking.EMBEDDING_MODEL, job_chunking.chunk_jobs,
+        _, hits = job_index.load_job_search_data(job_chunking.EMBEDDING_MODEL,
                                                 build_fts_query(["Kubernetes"]), None, None)
         self.assertEqual([hit["job_id"] for hit in hits], ["job_002"])
         for keywords in ([], [""], ['" OR Python'], ["Python) OR (Rust"]):

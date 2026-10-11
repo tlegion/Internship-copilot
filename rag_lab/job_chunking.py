@@ -28,15 +28,62 @@ def job_header(job: dict) -> str:
     ) + "\nDescription:\n"
 
 
-def _fitting_end(text: str, start: int, prefix: str, budget: int) -> int:
-    low, high = start, len(text)
-    while low < high:
-        middle = (low + high + 1) // 2
-        if count_tokens(prefix + text[start:middle]) <= budget:
-            low = middle
+def split_by_tokens(text: str, max_tokens: int) -> list[str]:
+    tokens = encoding().encode(text, disallowed_special=())
+    chunks = []
+    start = 0
+    while start < len(tokens):
+        end = min(start + max_tokens, len(tokens))
+        # A token boundary can fall inside a Unicode character. Back up until
+        # decoding is lossless; the next piece starts at the same boundary.
+        while end > start:
+            try:
+                piece = encoding().decode(tokens[start:end], errors="strict")
+                break
+            except UnicodeDecodeError:
+                end -= 1
+        if end == start:
+            raise ValueError("Token budget cannot fit a character")
+        chunks.append(piece)
+        start = end
+    return chunks
+
+
+def split_long_paragraph(paragraph: str, max_tokens: int) -> list[str]:
+    sentences = re.split(r"(?<=[.!?])(?=\s)", paragraph)
+    chunks = []
+    current = ""
+    for sentence in sentences:
+        if count_tokens(sentence) > max_tokens:
+            if current:
+                chunks.append(current)
+                current = ""
+            chunks.extend(split_by_tokens(sentence, max_tokens))
+        elif count_tokens(current + sentence) <= max_tokens:
+            current += sentence
         else:
-            high = middle - 1
-    return low
+            chunks.append(current)
+            current = sentence
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def trailing_overlap(text: str, max_tokens: int) -> str:
+    if max_tokens == 0:
+        return ""
+    tokens = encoding().encode(text, disallowed_special=())[-max_tokens:]
+    while tokens:
+        try:
+            overlap = encoding().decode(tokens, errors="strict")
+            break
+        except UnicodeDecodeError:
+            tokens = tokens[1:]
+    else:
+        return ""
+    while count_tokens(overlap) > max_tokens:
+        overlap = overlap[1:]
+    return overlap
 
 
 def chunk_job(job: dict, max_tokens: int = MAX_CHUNK_TOKENS,
@@ -52,38 +99,43 @@ def chunk_job(job: dict, max_tokens: int = MAX_CHUNK_TOKENS,
         # back to splitting the whole document without an oversized prefix.
         prefix = header if count_tokens(header) < max_tokens // 2 else ""
         body = job["description"] if prefix else document
+        # Reserve room for headers and overlap when splitting long sentences.
+        piece_limit = max_tokens - count_tokens(prefix) - overlap_tokens - 2
+        if piece_limit <= 0:
+            raise ValueError("Token budget cannot fit headers and overlap")
+        pieces = []
+        for paragraph in re.split(r"(?<=\n\n)(?=\S)", body):
+            if count_tokens(paragraph) <= piece_limit:
+                pieces.append(paragraph)
+            else:
+                pieces.extend(split_long_paragraph(paragraph, piece_limit))
+
         texts = []
-        start = 0
-        while start < len(body):
-            end = _fitting_end(body, start, prefix, max_tokens)
-            if end == start:
-                raise ValueError("Token budget cannot fit a character")
-            if end < len(body):
-                boundaries = list(re.finditer(r"\n\n|(?<=[.!?])\s+", body[start:end]))
-                if boundaries and boundaries[-1].end() > (end - start) // 2:
-                    end = start + boundaries[-1].end()
-            # A new text boundary can change BPE tokenization slightly.
-            while count_tokens(prefix + body[start:end]) > max_tokens:
-                end -= 1
-            texts.append(prefix + body[start:end])
-            if end == len(body):
-                break
-            # Find an approximately 50-token suffix, without breaking Unicode.
-            low, high = start + 1, end
-            while low < high:
-                middle = (low + high) // 2
-                if count_tokens(body[middle:end]) <= overlap_tokens:
-                    high = middle
-                else:
-                    low = middle + 1
-            start = low
-    return [
-        {"chunk_id": f"{job['job_id']}_chunk_{index:03d}",
-         "job_id": job["job_id"], "chunk_index": index, "text": text,
-         "content_hash": hashlib.sha256(text.encode("utf-8")).hexdigest()}
-        for index, text in enumerate(texts)
-    ]
+        current = ""
+        for piece in pieces:
+            if count_tokens(prefix + current + piece) > max_tokens:
+                texts.append(prefix + current)
+                current = trailing_overlap(current, overlap_tokens)
+                while count_tokens(prefix + current + piece) > max_tokens:
+                    current = current[1:]
+            current += piece
+        if current:
+            texts.append(prefix + current)
+
+    chunks = []
+    for index, text in enumerate(texts):
+        chunks.append({
+            "chunk_id": f"{job['job_id']}_chunk_{index:03d}",
+            "job_id": job["job_id"],
+            "chunk_index": index,
+            "text": text,
+            "content_hash": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        })
+    return chunks
 
 
 def chunk_jobs(jobs: list[dict]) -> list[dict]:
-    return [chunk for job in jobs for chunk in chunk_job(job)]
+    chunks = []
+    for job in jobs:
+        chunks.extend(chunk_job(job))
+    return chunks
