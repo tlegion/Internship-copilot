@@ -10,6 +10,12 @@ import re
 import sqlite3
 from errors import ToolError
 
+from pathlib import Path
+ROOT = Path(__file__).parent[0]
+import sys
+sys.path.insert(0, ROOT)
+import approval
+
 # JOBS = {
 #     "job_001": {
 #         "title": "AI Engineering Intern",
@@ -48,6 +54,7 @@ def create_job(
         raise ToolError("job already exists")
     similars = check_similar(title, company, description, location)
     if similars:
+        
         raise ToolError("similar job cached", similars)
 
     new_id = new_job_id()
