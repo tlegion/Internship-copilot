@@ -16,7 +16,7 @@ def request_tool_approval(
     tool_input: dict,
     call_id: str | None = None,
 ) -> bool:
-    print_approval_details(tool_name, call_id, tool_input)
+    print_approval_details(tool_name, tool_input, call_id)
 
     while True:
         answer = input(
@@ -29,6 +29,35 @@ def request_tool_approval(
         if answer in {"", "n", "no"}:
             return False
 
+        print("Please enter y or n.")
+
+
+def review_similar_job_creation(
+    tool_name: str,
+    tool_input: dict,
+    similars: list[dict],
+) -> bool:
+    print_approval_details(tool_name, tool_input)
+
+    for job in similars:
+        print(f"\nExisting Job ID: {job['id']}")
+        for field in ("title", "company", "description", "location"):
+            marker = "SAME" if tool_input[field] == job[field] else "DIFF"
+            print(f"  [{marker}] {field}: {job[field]}")
+
+    while True:
+        try:
+            answer = input(
+                "Similar jobs exist. Do you still want to insert this job? [y/N] "
+            ).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return False
+
+        if answer in {"y", "yes"}:
+            return True
+        if answer in {"", "n", "no"}:
+            return False
         print("Please enter y or n.")
 
 
