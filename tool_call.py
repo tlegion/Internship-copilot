@@ -1,10 +1,14 @@
-from tools.jobs import lookup_job, create_job
+from tools.jobs import lookup_job, create_job, list_jobs
 import json
 from approval import request_tool_approval
 from errors import HarnessError
 from tools.evidence import search_evidence_hybrid
 
 tool_list= {
+    "list_jobs": {
+        "handler": list_jobs,
+        "requires_approval": False,
+    },
     "lookup_job": {
         "handler": lookup_job,
         "requires_approval": False
@@ -21,6 +25,41 @@ tool_list= {
 
 
 tools = [
+    {
+        "type": "function",
+        "name": "list_jobs",
+        "description": (
+            "浏览已有岗位，不需要预先知道岗位 ID；已知单个 ID 时使用 lookup_job。"
+            "按岗位 ID 的数字后缀升序分页。has_more 为 true 时，"
+            "将 next_cursor 作为下一次的 after_job_id，并保持相同筛选条件。"
+            "company 和 location 是可独立使用或组合使用的精确筛选条件；"
+            "传 null 表示不筛选。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": ["integer", "null"],
+                    "description": "每页数量，1 到 50；null 时默认 20。",
+                },
+                "after_job_id": {
+                    "type": ["string", "null"],
+                    "description": "返回数字后缀大于此 ID 的岗位，例如 job_010；null 从头开始。ID 无须存在。",
+                },
+                "company": {
+                    "type": ["string", "null"],
+                    "description": "公司名称精确筛选；null 不筛选。",
+                },
+                "location": {
+                    "type": ["string", "null"],
+                    "description": "地点精确筛选；null 不筛选。",
+                },
+            },
+            "required": ["limit", "after_job_id", "company", "location"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
     {
         "type": "function",
         "name": "lookup_job",

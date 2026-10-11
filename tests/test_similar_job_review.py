@@ -64,7 +64,7 @@ class ApprovalTests(unittest.TestCase):
                 marker = "SAME" if PENDING[field] == similar[field] else "DIFF"
                 self.assertIn(f"[{marker}] {field}: {similar[field]}", text)
         prompt.assert_called_once_with(
-            "Similar jobs exist. Do you still want to insert this job? [y/N] "
+            "Similar jobs exist. Do you still want to insert this job? [Y/N] "
         )
 
     def test_review_answers_and_safe_interrupts(self):

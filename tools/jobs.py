@@ -4,7 +4,8 @@ from storages.database import (
     check_exists, 
     get_last_job, 
     insert_job,
-    check_similar
+    check_similar,
+    get_jobs_page,
 )
 import re
 import sqlite3
@@ -31,6 +32,27 @@ def lookup_job(job_id:str):
     if job is None:
         raise ToolError(f"Job not found: {job_id}")
     return job
+
+def list_jobs(
+    limit: int = 20,
+    after_job_id: str | None = None,
+    company: str | None = None,
+    location: str | None = None,
+) -> dict:
+    if limit is None:
+        limit = 20
+    if type(limit) is not int or not 1 <= limit <= 50:
+        raise ToolError("limit must be a positive integer no greater than 50")
+    if after_job_id is not None and (
+        not isinstance(after_job_id, str)
+        or re.fullmatch(r"job_[0-9]+", after_job_id) is None
+    ):
+        raise ToolError("after_job_id must have the format job_<digits>")
+    for name, value in (("company", company), ("location", location)):
+        if value is not None and not isinstance(value, str):
+            raise ToolError(f"{name} must be a string or null")
+    return get_jobs_page(limit, after_job_id, company, location)
+
 
 def new_job_id():
     last = get_last_job()

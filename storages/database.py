@@ -84,6 +84,45 @@ def get_all_jobs() -> dict | None:
     finally:
         connection.close()
 
+def get_jobs_page(
+    limit: int,
+    after_job_id: str | None = None,
+    company: str | None = None,
+    location: str | None = None,
+) -> dict:
+    connection = db_connection_ro()
+    try:
+        conditions = []
+        parameters = []
+        if after_job_id is not None:
+            conditions.append("CAST(SUBSTR(id, 5) AS INTEGER) > CAST(? AS INTEGER)")
+            parameters.append(after_job_id[4:])
+        if company is not None:
+            conditions.append("company = ?")
+            parameters.append(company)
+        if location is not None:
+            conditions.append("location = ?")
+            parameters.append(location)
+
+        query = "SELECT id AS job_id, title, company, description, location FROM jobs"
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY CAST(SUBSTR(id, 5) AS INTEGER) ASC LIMIT ?"
+        parameters.append(limit + 1)
+        rows = connection.execute(query, parameters).fetchall()
+        has_more = len(rows) > limit
+        jobs = [dict(row) for row in rows[:limit]]
+        return {
+            "jobs": jobs,
+            "has_more": has_more,
+            "next_cursor": jobs[-1]["job_id"] if has_more else None,
+        }
+    except sqlite3.Error as e:
+        raise StorageError(f"Unable to list jobs: {e}") from e
+    finally:
+        connection.close()
+
+
 def insert_job(
         id:str, title:str, company:str, 
         description:str, location:str
