@@ -138,18 +138,38 @@ def check_similar(
         description:str, location:str
 ):
     connection = db_connection_ro()
+    similars = []
+    key_enumerate = {"title", "company", "description", "location"}
+    search = {
+        "title": title,
+        "company": company,
+        "description": description,
+        "location": location
+    }
     try:
-        rows = connection.execute(
-            """
-            SELECT *
-            FROM jobs
-            WHERE title = ?
-            AND company = ?
-            AND location = ?
-            """,
-            (title, company, location)
-        ).fetchall()
-        return True if rows else False
+        for key in  key_enumerate:
+            remaining = [k for k in key_enumerate if k != key]
+            where_str = " AND ".join(f"{k} = ?" for k in remaining)
+            where_str += f"AND {key} IS NOT ?"
+            remaining_search = [search[k] for k in remaining]
+            remaining_search.append(search[key])
+            rows = connection.execute(
+                f"""
+                SELECT *
+                FROM jobs
+                WHERE {where_str}
+                """,
+                remaining_search
+            ).fetchall()
+            if rows:
+                similars.extend({
+                    **dict(row),
+                    "similar_reason": f"only {key} different"
+                    } for row in rows)
+
+        return similars
+
+
     except sqlite3.Error as e:
         raise StorageError(f"Unable to check whether job exists: {e}") from e
     finally:
