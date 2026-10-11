@@ -1,8 +1,4 @@
-def request_tool_approval(
-    tool_name: str,
-    tool_input: dict,
-    call_id: str,
-) -> bool:
+def print_approval_details(tool_name:str, call_id:str, tool_input:dict):
     print("\n========== APPROVAL REQUIRED ==========")
     print(f"Tool: {tool_name}")
     print(f"Call ID: {call_id}")
@@ -12,6 +8,14 @@ def request_tool_approval(
         print(f"  {key}: {value}")
 
     print("=======================================")
+
+
+def request_tool_approval(
+    tool_name: str,
+    tool_input: dict,
+    call_id: str,
+) -> bool:
+    print_approval_details(tool_name, call_id, tool_input)
 
     while True:
         answer = input(
