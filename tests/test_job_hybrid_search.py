@@ -15,6 +15,7 @@ from openai import APIConnectionError
 from errors import ProviderError, StorageError, ToolError
 from rag_lab import job_chunking, job_hybrid_search, job_indexing
 from rag_lab import reranker
+from rag_lab import job_reranker
 from scripts import migrate_db
 from storages import database, job_index
 from tools.jobs import search_jobs_hybrid
@@ -125,7 +126,7 @@ class JobIndexTests(unittest.TestCase):
         self.start_patch(database, "DB_PATH", self.path)
         self.embed_index = self.start_patch(job_indexing, "embedding_texts", side_effect=fake_embeddings)
         self.embed_query = self.start_patch(job_hybrid_search, "embedding_texts", side_effect=fake_embeddings)
-        self.start_patch(job_hybrid_search, "rerank_results",
+        self.start_patch(job_hybrid_search, "rerank_jobs",
                          side_effect=lambda query, candidates, top_k, **kwargs: candidates[:top_k])
 
     def start_patch(self, target, name, *args, **kwargs):
@@ -402,8 +403,8 @@ class JobRerankTests(unittest.TestCase):
         self.rows.insert(1, {**self.rows[0], "chunk_id": "job_000_chunk_001", "text": "Lower ranked passage"})
         self.start_patch(job_hybrid_search, "load_job_search_data", return_value=(self.rows, []))
         self.start_patch(job_hybrid_search, "dense_job_search", side_effect=lambda query, chunks: chunks)
-        self.client = self.start_patch(reranker, "OpenAI").return_value
-        environment = patch.dict(reranker.os.environ, {"OPENAI_API_KEY": "unit-test-key"})
+        self.client = self.start_patch(job_reranker, "OpenAI").return_value
+        environment = patch.dict(job_reranker.os.environ, {"OPENAI_API_KEY": "unit-test-key"})
         environment.start()
         self.addCleanup(environment.stop)
 
@@ -421,14 +422,14 @@ class JobRerankTests(unittest.TestCase):
         )
 
     def test_unique_bounded_candidates_and_matching_metadata(self):
-        with patch.object(job_hybrid_search, "rerank_results",
+        with patch.object(job_hybrid_search, "rerank_jobs",
                           side_effect=lambda query, candidates, top_k, **kwargs: candidates[:top_k]) as rerank:
             self.search()
         query, candidates = rerank.call_args.args
         self.assertEqual(query, "Python RAG backend roles")
         self.assertEqual(len(candidates), 25)
         self.assertEqual(len({candidate["job_id"] for candidate in candidates}), 25)
-        self.assertEqual(rerank.call_args.kwargs, {"top_k": 2, "job_mode": True})
+        self.assertEqual(rerank.call_args.kwargs, {"top_k": 2})
         text = candidates[0]["text"]
         for value in ("Python Intern 0", "Demo", "Sydney", "Matching Python RAG passage 0"):
             self.assertIn(value, text)
@@ -444,7 +445,7 @@ class JobRerankTests(unittest.TestCase):
         self.assertEqual(set(result["jobs"][0]), {"job_id", "title", "company", "location", "description", "rank"})
         self.assertEqual(json.loads(json.dumps(result)), result)
         request = self.client.responses.parse.call_args.kwargs
-        self.assertEqual(request["model"], reranker.RERANK_MODEL)
+        self.assertEqual(request["model"], job_reranker.RERANK_MODEL)
         self.assertEqual(request["reasoning"], {"effort": "none"})
         self.assertIn("not candidate-job fit", request["input"][1]["content"])
 
@@ -478,18 +479,19 @@ class JobRerankTests(unittest.TestCase):
             self.assertEqual([job["job_id"] for job in self.search()["jobs"]], ["job_000", "job_001"])
 
     def test_unavailable_configuration_falls_back_without_api_call(self):
-        with patch.dict(reranker.os.environ, {"OPENAI_API_KEY": ""}), redirect_stdout(io.StringIO()):
+        with patch.dict(job_reranker.os.environ, {"OPENAI_API_KEY": ""}), redirect_stdout(io.StringIO()):
             result = self.search()
         self.assertEqual([job["job_id"] for job in result["jobs"]], ["job_000", "job_001"])
         self.client.responses.parse.assert_not_called()
 
     def test_empty_results_do_not_rerank(self):
         with patch.object(job_hybrid_search, "load_job_search_data", return_value=([], [])), \
-                patch.object(job_hybrid_search, "rerank_results") as rerank:
+                patch.object(job_hybrid_search, "rerank_jobs") as rerank:
             self.assertEqual(self.search(), {"jobs": []})
         rerank.assert_not_called()
 
     def test_evidence_defaults_and_fallback_remain_unchanged(self):
+        self.client = self.start_patch(reranker, "OpenAI").return_value
         candidates = [{"text": "Evidence A"}, {"text": "Evidence B"}]
         self.parsed([1])
         result = reranker.rerank_results("Python experience", candidates, top_k=1)
@@ -499,6 +501,13 @@ class JobRerankTests(unittest.TestCase):
         self.assertIn("Rank candidate evidence", request["input"][0]["content"])
         self.client.responses.parse.side_effect = APIConnectionError(request=Mock())
         self.assertEqual(reranker.rerank_results("Python experience", candidates, top_k=1), candidates[:1])
+
+    def test_evidence_public_interface_remains_unchanged(self):
+        import inspect
+        parameters = inspect.signature(reranker.rerank_results).parameters
+        self.assertEqual(list(parameters), ["query", "candidates", "top_k"])
+        self.assertEqual(parameters["top_k"].default, 3)
+        self.assertIsNot(job_reranker.OpenAI, reranker.OpenAI)
 
 
 if __name__ == "__main__":

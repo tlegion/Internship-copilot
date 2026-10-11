@@ -6,7 +6,7 @@ from rag_lab.job_chunking import EMBEDDING_MODEL
 from rag_lab.job_indexing import embedding_texts
 from storages.job_index import load_job_search_data
 from rag_lab.hybrid_search import reciprocal_rank_fusion
-from rag_lab.reranker import rerank_results
+from rag_lab.job_reranker import rerank_jobs
 
 RERANK_CANDIDATES = 25
 
@@ -75,7 +75,7 @@ def hybrid_job_search(query: str, keywords: list[str], company: str | None,
     if not candidates:
         return {"jobs": []}
     try:
-        ranked = rerank_results(query, candidates, top_k=top_k, job_mode=True)
+        ranked = rerank_jobs(query, candidates, top_k=top_k)
     except ProviderError as error:
         print(f"{error}. Using RRF order; Job reranking was not applied.")
         ranked = candidates[:top_k]

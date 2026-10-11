@@ -79,16 +79,17 @@ of zero, by calling the existing `reciprocal_rank_fusion()` directly. Internal
 rows retain branch ranks/scores and fusion scores. All eligible
 chunks are retained before fusion and deduplication. The first fused appearance
 of each job determines its initial rank; `top_k` counts distinct jobs (default 10,
-maximum 20). The first 25 distinct RRF jobs are passed to the existing LLM reranker
-in Job mode. Candidate text contains metadata and the highest-ranked matching
+maximum 20). The first 25 distinct RRF jobs are passed to `job_reranker.rerank_jobs()`.
+Candidate text contains metadata and the highest-ranked matching
 chunk, rather than the full long description. Ranking uses the original semantic
 query and relevance to roles, technologies and responsibilities, not candidate-job
 fit. Final ranks are reassigned starting at 1.
 Joined original job metadata supplies full descriptions without per-job SQL
 queries. The model receives only job fields and rank.
 
-Job mode reuses Evidence's `gpt-6-luna`, Responses structured parsing and reasoning
-effort `none`. Evidence's default prompt and fallback behavior remain unchanged.
+The independent Job reranker follows Evidence's `gpt-6-luna`, Responses structured
+parsing and reasoning effort `none` pattern. Evidence's original public interface,
+prompt and fallback behavior remain unchanged.
 API failures, missing configuration, missing/invalid parsed output or invalid
 indices retain the RRF order. The CLI reports that reranking was not applied;
 the job response shape stays unchanged. Empty results skip reranking and a single
