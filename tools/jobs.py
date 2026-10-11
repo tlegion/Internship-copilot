@@ -3,7 +3,8 @@ from storages.database import (
     get_all_jobs, 
     check_exists, 
     get_last_job, 
-    insert_job
+    insert_job,
+    check_similar
 )
 import re
 import sqlite3
@@ -45,6 +46,10 @@ def create_job(
 ) -> dict:
     if check_exists(title, company, description, location):
         raise ToolError("job already exists")
+    similars = check_similar(title, company, description, location)
+    if similars:
+        raise ToolError("similar job cached", similars)
+
     new_id = new_job_id()
     
     return insert_job(new_id,title,company, description, location)
