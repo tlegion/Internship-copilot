@@ -7,10 +7,14 @@ import unittest
 from contextlib import closing, redirect_stdout
 import io
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+
+from openai import APIConnectionError
 
 from errors import ProviderError, StorageError, ToolError
 from rag_lab import job_chunking, job_hybrid_search, job_indexing
+from rag_lab import reranker
 from scripts import migrate_db
 from storages import database, job_index
 from tools.jobs import search_jobs_hybrid
@@ -77,6 +81,25 @@ class JobChunkTests(unittest.TestCase):
         job["location"] = ""
         self.assertNotEqual(first, job_chunking.chunk_job(job))
 
+    def test_unusual_token_boundary_declines_oversized_piece_without_looping(self):
+        job = self.job("Python APIs. " * 1000)
+        header = job_chunking.job_header(job)
+        real_count = job_chunking.count_tokens
+
+        def changed_boundary_count(text):
+            if text == header + "decoded piece":
+                return 801
+            return real_count(text)
+
+        with patch.object(job_chunking, "split_long_paragraph", return_value=["decoded piece"]), \
+                patch.object(job_chunking, "count_tokens", side_effect=changed_boundary_count):
+            with self.assertRaisesRegex(ValueError, "Decoded chunk exceeds"):
+                job_chunking.chunk_job(job)
+        # Normal Unicode token boundaries still produce nonempty, bounded chunks.
+        for chunk in job_chunking.chunk_job(self.job("你好🙂 " * 1000)):
+            self.assertTrue(chunk["text"].strip())
+            self.assertLessEqual(real_count(chunk["text"]), 800)
+
 
 class JobIndexTests(unittest.TestCase):
     def setUp(self):
@@ -102,6 +125,8 @@ class JobIndexTests(unittest.TestCase):
         self.start_patch(database, "DB_PATH", self.path)
         self.embed_index = self.start_patch(job_indexing, "embedding_texts", side_effect=fake_embeddings)
         self.embed_query = self.start_patch(job_hybrid_search, "embedding_texts", side_effect=fake_embeddings)
+        self.start_patch(job_hybrid_search, "rerank_results",
+                         side_effect=lambda query, candidates, top_k, **kwargs: candidates[:top_k])
 
     def start_patch(self, target, name, *args, **kwargs):
         patcher = patch.object(target, name, *args, **kwargs)
@@ -361,6 +386,119 @@ class FusionTests(unittest.TestCase):
         self.assertTrue(math.isclose(result[0]["rrf_score"], 0.9))
         self.assertTrue(math.isclose(result[1]["rrf_score"], 0.6))
         self.assertEqual(result[1]["bm25_score"], -2)
+
+
+class JobRerankTests(unittest.TestCase):
+    def setUp(self):
+        self.rows = []
+        for index in range(30):
+            self.rows.append({
+                "chunk_id": f"job_{index:03d}_chunk_000", "job_id": f"job_{index:03d}",
+                "title": f"Python Intern {index}", "company": "Demo", "location": "Sydney",
+                "description": f"Complete original description {index}. " * 100,
+                "text": f"Matching Python RAG passage {index}", "score": 1.0,
+            })
+        # A second chunk from the best job must never become a second candidate.
+        self.rows.insert(1, {**self.rows[0], "chunk_id": "job_000_chunk_001", "text": "Lower ranked passage"})
+        self.start_patch(job_hybrid_search, "load_job_search_data", return_value=(self.rows, []))
+        self.start_patch(job_hybrid_search, "dense_job_search", side_effect=lambda query, chunks: chunks)
+        self.client = self.start_patch(reranker, "OpenAI").return_value
+        environment = patch.dict(reranker.os.environ, {"OPENAI_API_KEY": "unit-test-key"})
+        environment.start()
+        self.addCleanup(environment.stop)
+
+    def start_patch(self, target, name, **kwargs):
+        patcher = patch.object(target, name, **kwargs)
+        self.addCleanup(patcher.stop)
+        return patcher.start()
+
+    def search(self, top_k=2):
+        return job_hybrid_search.hybrid_job_search("Python RAG backend roles", ["Python"], None, None, top_k)
+
+    def parsed(self, indices):
+        self.client.responses.parse.return_value = SimpleNamespace(
+            output_parsed=SimpleNamespace(ranked_indices=indices)
+        )
+
+    def test_unique_bounded_candidates_and_matching_metadata(self):
+        with patch.object(job_hybrid_search, "rerank_results",
+                          side_effect=lambda query, candidates, top_k, **kwargs: candidates[:top_k]) as rerank:
+            self.search()
+        query, candidates = rerank.call_args.args
+        self.assertEqual(query, "Python RAG backend roles")
+        self.assertEqual(len(candidates), 25)
+        self.assertEqual(len({candidate["job_id"] for candidate in candidates}), 25)
+        self.assertEqual(rerank.call_args.kwargs, {"top_k": 2, "job_mode": True})
+        text = candidates[0]["text"]
+        for value in ("Python Intern 0", "Demo", "Sydney", "Matching Python RAG passage 0"):
+            self.assertIn(value, text)
+        self.assertNotIn("Lower ranked passage", text)
+        self.assertNotIn("Complete original description", text)
+
+    def test_llm_changes_order_preserves_full_jobs_and_reassigns_ranks(self):
+        self.parsed([24, 0])
+        result = self.search()
+        self.assertEqual([job["job_id"] for job in result["jobs"]], ["job_024", "job_000"])
+        self.assertEqual([job["rank"] for job in result["jobs"]], [1, 2])
+        self.assertEqual(result["jobs"][0]["description"], self.rows[25]["description"])
+        self.assertEqual(set(result["jobs"][0]), {"job_id", "title", "company", "location", "description", "rank"})
+        self.assertEqual(json.loads(json.dumps(result)), result)
+        request = self.client.responses.parse.call_args.kwargs
+        self.assertEqual(request["model"], reranker.RERANK_MODEL)
+        self.assertEqual(request["reasoning"], {"effort": "none"})
+        self.assertIn("not candidate-job fit", request["input"][1]["content"])
+
+    def test_top_k_contract(self):
+        self.parsed(list(range(19, -1, -1)))
+        self.assertEqual(len(self.search(top_k=20)["jobs"]), 20)
+        self.parsed([5])
+        self.assertEqual(len(self.search(top_k=1)["jobs"]), 1)
+
+    def test_invalid_indices_fall_back_to_distinct_rrf_order(self):
+        for indices in ([0, 0], [-1, 0], [0, 25], [0], []):
+            with self.subTest(indices=indices):
+                self.parsed(indices)
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    result = self.search()
+                self.assertEqual([job["job_id"] for job in result["jobs"]], ["job_000", "job_001"])
+                self.assertEqual([job["rank"] for job in result["jobs"]], [1, 2])
+                self.assertIn("reranking was not applied", output.getvalue())
+
+    def test_api_failure_missing_parse_and_invalid_parse_fall_back(self):
+        failures = (APIConnectionError(request=Mock()),
+                    ValueError("invalid structured output"))
+        for failure in failures:
+            with self.subTest(failure=failure), redirect_stdout(io.StringIO()):
+                self.client.responses.parse.side_effect = failure
+                self.assertEqual([job["job_id"] for job in self.search()["jobs"]], ["job_000", "job_001"])
+        self.client.responses.parse.side_effect = None
+        self.client.responses.parse.return_value = SimpleNamespace(output_parsed=None)
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual([job["job_id"] for job in self.search()["jobs"]], ["job_000", "job_001"])
+
+    def test_unavailable_configuration_falls_back_without_api_call(self):
+        with patch.dict(reranker.os.environ, {"OPENAI_API_KEY": ""}), redirect_stdout(io.StringIO()):
+            result = self.search()
+        self.assertEqual([job["job_id"] for job in result["jobs"]], ["job_000", "job_001"])
+        self.client.responses.parse.assert_not_called()
+
+    def test_empty_results_do_not_rerank(self):
+        with patch.object(job_hybrid_search, "load_job_search_data", return_value=([], [])), \
+                patch.object(job_hybrid_search, "rerank_results") as rerank:
+            self.assertEqual(self.search(), {"jobs": []})
+        rerank.assert_not_called()
+
+    def test_evidence_defaults_and_fallback_remain_unchanged(self):
+        candidates = [{"text": "Evidence A"}, {"text": "Evidence B"}]
+        self.parsed([1])
+        result = reranker.rerank_results("Python experience", candidates, top_k=1)
+        self.assertEqual(result, [{"text": "Evidence B", "rerank_rank": 1}])
+        request = self.client.responses.parse.call_args.kwargs
+        self.assertIn("Candidate evidence:", request["input"][1]["content"])
+        self.assertIn("Rank candidate evidence", request["input"][0]["content"])
+        self.client.responses.parse.side_effect = APIConnectionError(request=Mock())
+        self.assertEqual(reranker.rerank_results("Python experience", candidates, top_k=1), candidates[:1])
 
 
 if __name__ == "__main__":

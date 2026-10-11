@@ -113,6 +113,8 @@ def chunk_job(job: dict, max_tokens: int = MAX_CHUNK_TOKENS,
         texts = []
         current = ""
         for piece in pieces:
+            if count_tokens(prefix + piece) > max_tokens:
+                raise ValueError("Decoded chunk exceeds the token budget")
             if count_tokens(prefix + current + piece) > max_tokens:
                 texts.append(prefix + current)
                 current = trailing_overlap(current, overlap_tokens)

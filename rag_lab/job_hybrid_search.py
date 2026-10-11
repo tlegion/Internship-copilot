@@ -6,6 +6,9 @@ from rag_lab.job_chunking import EMBEDDING_MODEL
 from rag_lab.job_indexing import embedding_texts
 from storages.job_index import load_job_search_data
 from rag_lab.hybrid_search import reciprocal_rank_fusion
+from rag_lab.reranker import rerank_results
+
+RERANK_CANDIDATES = 25
 
 
 def fuse_job_chunks(dense: list[dict], bm25: list[dict]) -> list[dict]:
@@ -50,19 +53,41 @@ def hybrid_job_search(query: str, keywords: list[str], company: str | None,
     fused_results = fuse_job_chunks(dense_results, bm25_results)
     # Scan all eligible chunks so a long job cannot exhaust the job budget.
     seen_job_ids = set()
-    jobs = []
+    candidates = []
     for row in fused_results:
         if row["job_id"] in seen_job_ids:
             continue
         seen_job_ids.add(row["job_id"])
-        jobs.append({
+        candidates.append({
             "job_id": row["job_id"],
             "title": row["title"],
             "company": row["company"],
             "location": row["location"],
             "description": row["description"],
-            "rank": len(jobs) + 1,
+            "text": (
+                f"Title: {row['title']}\nCompany: {row['company']}\n"
+                f"Location: {row['location']}\nMatching passage:\n{row['text']}"
+            ),
         })
-        if len(jobs) == top_k:
+        if len(candidates) == RERANK_CANDIDATES:
             break
+
+    if not candidates:
+        return {"jobs": []}
+    try:
+        ranked = rerank_results(query, candidates, top_k=top_k, job_mode=True)
+    except ProviderError as error:
+        print(f"{error}. Using RRF order; Job reranking was not applied.")
+        ranked = candidates[:top_k]
+
+    jobs = []
+    for rank, candidate in enumerate(ranked[:top_k], start=1):
+        jobs.append({
+            "job_id": candidate["job_id"],
+            "title": candidate["title"],
+            "company": candidate["company"],
+            "location": candidate["location"],
+            "description": candidate["description"],
+            "rank": rank,
+        })
     return {"jobs": jobs}
