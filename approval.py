@@ -20,7 +20,7 @@ def request_tool_approval(
 
     while True:
         answer = input(
-            "Approve this tool call? [y/N]: "
+            "Approve this tool call? [Y/N]: "
         ).strip().lower()
 
         if answer in {"y", "yes"}:
@@ -48,7 +48,7 @@ def review_similar_job_creation(
     while True:
         try:
             answer = input(
-                "Similar jobs exist. Do you still want to insert this job? [y/N] "
+                "Similar jobs exist. Do you still want to insert this job? [Y/N] "
             ).strip().lower()
         except (EOFError, KeyboardInterrupt):
             print()
