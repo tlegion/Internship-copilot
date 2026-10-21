@@ -45,18 +45,23 @@ has no default, so omitting it is rejected before approval.
 
 `BASE_TOOL_LIST` and `SKILL_TOOL_LIST` still control trusted execution and approval.
 Session closures expose only Skill names and resource paths, without exposing
-catalog or activation state as model arguments. Their Literal annotations derive
-the current enum constraints. Single-value Literals are displayed as enums to
-preserve the previous schema format. Skill descriptions still come from catalog
+catalog or activation state as model arguments. Their `Annotated[str, Field(...),
+AfterValidator(...)]` annotations expose current names as JSON Schema enums and
+reject unavailable names in Pydantic validation. Even a single name is emitted as
+an enum, so no `const` conversion is needed. Skill descriptions still come from catalog
 metadata. Loading a Skill enables its trusted registrations only in the next
 batch, with the existing loop unchanged. Skill files cannot register handlers.
 
 ## Validation
 
-82 unit tests passed with socket connections blocked and the existing tokenizer
+83 unit tests passed with socket connections blocked and the existing tokenizer
 cache configured. No model API calls were made. `pip check` passed. All base
 schemas passed JSON Schema meta-validation. Existing English descriptions were
 compared against HEAD and matched after whitespace normalization.
+
+Pyright also reports zero errors and warnings for `tool_call.py` with the project
+virtual environment. Dynamic Skill annotations contain no runtime expressions in
+type positions and require no diagnostic suppression.
 
 PowerShell regression command (uses the local tokenizer cache):
 

@@ -1,7 +1,8 @@
-from typing import Literal
+from collections.abc import Collection
+from typing import Annotated
 
 from agents.function_schema import function_schema
-from pydantic import ValidationError
+from pydantic import AfterValidator, Field, JsonValue, ValidationError
 
 from tools.jobs import lookup_job, create_job, list_jobs, search_jobs_hybrid
 from approval import request_tool_approval
@@ -46,33 +47,47 @@ def get_function_schema(name, handler):
     # and coerces values. Enforce the same boundary at runtime as well.
     schema.params_pydantic_model.model_config.update(extra="forbid", strict=True)
     schema.params_pydantic_model.model_rebuild(force=True)
-    # Pydantic emits const for a single Literal; retain the existing Skill enum format.
-    for field in schema.params_json_schema.get("properties", {}).values():
-        if "const" in field:
-            field["enum"] = [field.pop("const")]
     return schema
 
 
-def get_available_tools(catalog: dict | None = None, loaded_skills: set | None = None) -> dict:
+def _validate_skill_name(name: str, names: Collection[str]) -> str:
+    if name not in names:
+        raise ValueError(f"Unavailable Skill: {name}")
+    return name
+
+
+def get_available_tools(catalog: dict[str, dict] | None = None, loaded_skills: set[str] | None = None) -> dict:
     catalog = catalog or {}
-    loaded = set(loaded_skills or ()) & catalog.keys()
+    loaded: set[str] = set(loaded_skills or ()) & catalog.keys()
     available = BASE_TOOL_LIST.copy()
     if catalog:
-        def load(name: Literal[tuple(sorted(catalog))]) -> str:
+        load_name_schema: dict[str, JsonValue] = {"enum": [name for name in sorted(catalog)]}
+
+        def load(name: Annotated[
+            str,
+            Field(json_schema_extra=load_name_schema),
+            AfterValidator(lambda name: _validate_skill_name(name, catalog)),
+        ]) -> str:
             """Load relevant Skill instructions before using them. Available Skills:"""
             return load_skill(name, catalog)
 
         descriptions = "\n".join(
             f"{name}: {entry['description']}" for name, entry in sorted(catalog.items())
         )
-        load.__doc__ += "\n" + descriptions
+        load.__doc__ = (load.__doc__ or "") + "\n" + descriptions
 
         available["load_skill"] = {
             "handler": load,
             "requires_approval": False,
         }
     if loaded:
-        def read(name: Literal[tuple(sorted(loaded))], path: str) -> str:
+        read_name_schema: dict[str, JsonValue] = {"enum": [name for name in sorted(loaded)]}
+
+        def read(name: Annotated[
+            str,
+            Field(json_schema_extra=read_name_schema),
+            AfterValidator(lambda name: _validate_skill_name(name, loaded)),
+        ], path: str) -> str:
             """Read a supporting UTF-8 text file inside an already loaded Skill. Scripts are text only and never execute.
 
             Args:

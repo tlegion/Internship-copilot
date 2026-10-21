@@ -1,10 +1,13 @@
 import io
+import json
 import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
+
+from pydantic import ValidationError
 
 import loop
 import provider
@@ -98,6 +101,58 @@ Instructions only loaded on demand.
         self.assertNotIn("Instructions only loaded", schema["description"])
         self.assertNotIn("job-comparison", loop.construct_system_prompt(1, 0, 10, 3))
         self.assertNotIn("load_skill", {item["name"] for item in tool_call.get_tool_schemas({}, set())})
+
+    def test_dynamic_skill_names_with_zero_one_and_multiple_skills(self):
+        second = self.root / "second-skill"
+        second.mkdir()
+        (second / "SKILL.md").write_text(
+            "---\nname: second-skill\ndescription: Second test Skill.\n---\nInstructions.",
+            encoding="utf-8",
+        )
+        catalogs = ({}, self.catalog, skill.discover_skills(self.root))
+        for catalog in catalogs:
+            for loaded in (set(), {"missing"}, {"job-comparison"}, set(catalog)):
+                with self.subTest(catalog=list(catalog), loaded=loaded):
+                    active = set(catalog) & loaded
+                    available = tool_call.get_available_tools(catalog, loaded)
+                    schemas = {s["name"]: s for s in tool_call.get_tool_schemas(catalog, loaded)}
+                    self.assertEqual(set(available), set(schemas))
+                    for tool_name, allowed in (("load_skill", set(catalog)),
+                                               ("read_skill_resource", active)):
+                        if not allowed:
+                            self.assertNotIn(tool_name, schemas)
+                            self.assertFalse(tool_call.run_tool(
+                                tool_name, {"name": "job-comparison", "path": "references/guide.md"},
+                                "call", catalog=catalog, loaded_skills=loaded,
+                            )["success"])
+                            continue
+                        field = schemas[tool_name]["parameters"]["properties"]["name"]
+                        self.assertEqual(field["type"], "string")
+                        self.assertEqual(field["enum"], sorted(allowed))
+                        self.assertNotIn("const", field)
+                        contract = tool_call.get_function_schema(tool_name, available[tool_name]["handler"])
+                        model = contract.params_pydantic_model
+                        extra = {"path": "references/guide.md"} if tool_name == "read_skill_resource" else {}
+                        for name in allowed:
+                            self.assertEqual(model.model_validate({"name": name, **extra}).name, name)
+                        invalid = ["missing", "", 1, None, [], *set(catalog).difference(allowed)]
+                        with patch.object(tool_call, "load_skill") as load, \
+                                patch.object(tool_call, "read_skill_resource") as read, \
+                                patch.object(tool_call, "request_tool_approval") as approve:
+                            for name in invalid:
+                                arguments = {"name": name, **extra}
+                                with self.assertRaises(ValidationError):
+                                    model.model_validate(arguments)
+                                for payload in (arguments, json.dumps(arguments)):
+                                    result = tool_call.run_tool(
+                                        tool_name, payload, "call", catalog=catalog, loaded_skills=loaded,
+                                    )
+                                    self.assertFalse(result["success"])
+                                    self.assertEqual(result["error_type"], "ToolError")
+                                    self.assertIn("Invalid arguments", result["error_msg"])
+                            load.assert_not_called()
+                            read.assert_not_called()
+                            approve.assert_not_called()
 
     def test_load_returns_complete_text_and_resource_requires_activation(self):
         result = self.call("load_skill", {"name": "job-comparison"})
