@@ -3,6 +3,7 @@ import importlib.util
 import json
 import unittest
 from contextlib import redirect_stdout
+from functools import wraps
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import Mock, patch
@@ -15,7 +16,14 @@ from tools import jobs
 # Load the real dispatcher with unrelated evidence retrieval isolated: importing
 # its tokenizer would otherwise download data before any job test runs.
 evidence_stub = ModuleType("tools.evidence")
-evidence_stub.search_evidence_hybrid = Mock()
+evidence_handler = Mock()
+
+
+def search_evidence_hybrid(query: str, keywords: list[str], candidate_id: str):
+    return evidence_handler(query=query, keywords=keywords, candidate_id=candidate_id)
+
+
+evidence_stub.search_evidence_hybrid = search_evidence_hybrid
 spec = importlib.util.spec_from_file_location(
     "_job_review_tool_call", Path(__file__).resolve().parents[1] / "tool_call.py"
 )
@@ -147,8 +155,8 @@ class CreateJobTests(unittest.TestCase):
         self.insert.assert_not_called()
 
     def test_generic_rejection_never_dispatches_business_function(self):
-        with patch.dict(tool_call.tool_list["create_job"], {"handler": Mock(wraps=jobs.create_job)}):
-            handler = tool_call.tool_list["create_job"]["handler"]
+        handler = wraps(jobs.create_job)(Mock(wraps=jobs.create_job))
+        with patch.dict(tool_call.tool_list["create_job"], {"handler": handler}):
             result, prompt = self.run_create(["n"])
             handler.assert_not_called()
         self.assertFalse(result["success"])

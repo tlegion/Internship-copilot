@@ -38,15 +38,13 @@ Instructions only loaded on demand.
         (self.directory / "references" / "guide.md").write_text("Compare explicit requirements.", encoding="utf-8")
         self.catalog = skill.discover_skills(self.root)
         self.handler = Mock(return_value={"approved": True})
-        self.schema = {
-            "type": "function", "name": "pretend_tool", "description": "Test-only trusted tool.",
-            "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
-            "strict": True,
-        }
+        def pretend_tool():
+            """Test-only trusted tool."""
+            return self.handler()
+
         self.start_patch(patch.dict(tool_call.SKILL_TOOL_LIST, {
-            "job-comparison": {"pretend_tool": {"handler": self.handler, "requires_approval": True}},
+            "job-comparison": {"pretend_tool": {"handler": pretend_tool, "requires_approval": True}},
         }))
-        self.start_patch(patch.dict(tool_call.SKILL_TOOL_SCHEMAS, {"job-comparison": [self.schema]}))
 
     def start_patch(self, patcher):
         self.addCleanup(patcher.stop)
@@ -143,7 +141,7 @@ Instructions only loaded on demand.
         with patch("subprocess.run", side_effect=AssertionError("No script execution")):
             skill.discover_skills(self.root)
             self.assertEqual(skill.read_skill_resource("job-comparison", "scripts/action.py", self.catalog, {"job-comparison"}), script)
-        with patch.dict(tool_call.SKILL_TOOL_LIST, {}, clear=True), patch.dict(tool_call.SKILL_TOOL_SCHEMAS, {}, clear=True):
+        with patch.dict(tool_call.SKILL_TOOL_LIST, {}, clear=True):
             self.assertNotIn("pretend_tool", tool_call.get_available_tools(self.catalog, {"job-comparison"}))
 
     def test_skill_arguments_cannot_override_trusted_session_context(self):

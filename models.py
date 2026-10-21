@@ -20,13 +20,13 @@ class UserInput:
 
 class ModelToolCall:
     tool_name: str
-    arguments: dict
+    arguments: dict | str
     call_id: str
 
     def __init__(
         self,
         tool_name: str,
-        arguments: dict,
+        arguments: dict | str,
         call_id: str,
     ):
         self.tool_name = tool_name

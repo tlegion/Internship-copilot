@@ -15,7 +15,14 @@ from tools import jobs
 
 # Keep dispatcher tests offline without importing the unrelated RAG tokenizer.
 evidence_stub = ModuleType("tools.evidence")
-evidence_stub.search_evidence_hybrid = Mock()
+evidence_handler = Mock()
+
+
+def search_evidence_hybrid(query: str, keywords: list[str], candidate_id: str):
+    return evidence_handler(query=query, keywords=keywords, candidate_id=candidate_id)
+
+
+evidence_stub.search_evidence_hybrid = search_evidence_hybrid
 spec = importlib.util.spec_from_file_location(
     "_list_jobs_tool_call", Path(__file__).resolve().parents[1] / "tool_call.py"
 )
@@ -136,19 +143,19 @@ class ListJobsTests(unittest.TestCase):
         self.assertTrue(schema["strict"])
         self.assertFalse(parameters["additionalProperties"])
         self.assertEqual(set(parameters["required"]), set(parameters["properties"]))
-        self.assertEqual(parameters["properties"]["limit"]["type"], ["integer", "null"])
+        self.assertEqual(parameters["properties"]["limit"]["anyOf"], [{"type": "integer", "minimum": 1, "maximum": 50}, {"type": "null"}])
         for field in ("after_job_id", "company", "location"):
-            self.assertEqual(parameters["properties"][field]["type"], ["string", "null"])
+            self.assertEqual(parameters["properties"][field]["anyOf"], [{"type": "string"}, {"type": "null"}])
         self.assertIs(tool_call.tool_list["list_jobs"]["handler"], jobs.list_jobs)
         self.assertFalse(tool_call.tool_list["list_jobs"]["requires_approval"])
         self.assertIs(tool_call.tool_list["lookup_job"]["handler"], jobs.lookup_job)
         self.assertIs(tool_call.tool_list["create_job"]["handler"], jobs.create_job)
         self.assertTrue(tool_call.tool_list["create_job"]["requires_approval"])
         arguments = dict(query="Python", keywords=["Python"], candidate_id="candidate_001")
-        evidence_stub.search_evidence_hybrid.return_value = [{"text": "evidence"}]
+        evidence_handler.return_value = [{"text": "evidence"}]
         self.assertEqual(tool_call.run_tool("search_evidence_hybrid", arguments, "call_003"),
                          {"success": True, "result": [{"text": "evidence"}]})
-        evidence_stub.search_evidence_hybrid.assert_called_once_with(**arguments)
+        evidence_handler.assert_called_once_with(**arguments)
 
     def test_lookup_job_retains_original_response(self):
         self.assertEqual(jobs.lookup_job("job_001"), {

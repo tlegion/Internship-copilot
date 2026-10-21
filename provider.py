@@ -62,7 +62,7 @@ def call_openai(
         if item.type == "function_call":
             tool_calls.append(ModelToolCall(
                 tool_name=item.name,
-                arguments=json.loads(item.arguments),
+                arguments=decode_tool_arguments(item.arguments),
                 call_id= item.call_id
             ))
 
@@ -74,6 +74,14 @@ def call_openai(
         raw=response,
         round=round
     )
+
+
+def decode_tool_arguments(arguments: str):
+    try:
+        decoded = json.loads(arguments)
+        return decoded if isinstance(decoded, dict) else arguments
+    except (ValueError, TypeError):
+        return arguments
 
 
 def load_tool_arguments(arguments, provider: ModelProvider):

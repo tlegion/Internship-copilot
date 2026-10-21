@@ -1,3 +1,7 @@
+from typing import Annotated
+
+from pydantic import Field
+
 from storages.database import (
     get_job, 
     get_all_jobs, 
@@ -28,17 +32,34 @@ import approval
 
 def lookup_job(job_id:str):
 
+    """Retrieve job details by job ID.
+
+    Args:
+        job_id: Job ID, for example job_001
+    """
     job = get_job(job_id)
     if job is None:
         raise ToolError(f"Job not found: {job_id}")
     return job
 
 def list_jobs(
-    limit: int = 20,
+    limit: Annotated[int, Field(ge=1, le=50)] | None = 20,
     after_job_id: str | None = None,
     company: str | None = None,
     location: str | None = None,
 ) -> dict:
+    """Browse stored jobs without knowing their IDs in advance; use lookup_job for one known ID.
+    Paginate in ascending order of the numeric job ID suffix. When has_more is true, pass
+    next_cursor as after_job_id on the next call and keep the same filters. company and location are
+    exact filters that can be used independently or together; pass null to disable a filter.
+
+    Args:
+        limit: Number of jobs per page, 1 to 50; null defaults to 20.
+        after_job_id: Return jobs with a numeric suffix greater than this ID, for example
+            job_010; null starts from the beginning. The ID does not need to exist.
+        company: Exact company name filter; null disables it.
+        location: Exact location filter; null disables it.
+    """
     if limit is None:
         limit = 20
     if type(limit) is not int or not 1 <= limit <= 50:
@@ -59,8 +80,21 @@ def search_jobs_hybrid(
     keywords: list[str],
     company: str | None = None,
     location: str | None = None,
-    top_k: int = 10,
+    top_k: Annotated[int, Field(ge=1, le=20)] | None = 10,
 ) -> dict:
+    """Find stored jobs by natural-language role preferences, technologies and skills. Use meaningful
+    English semantic queries for English job records and distinctive technical keywords for lexical
+    retrieval. Rank is retrieval relevance, not candidate fit. Use list_jobs for browsing with exact
+    filters and pagination; lookup_job for one known ID. Company and location are optional exact
+    filters. An outdated index must be synchronized by the developer before searching.
+
+    Args:
+        query: Nonempty English semantic search query.
+        keywords: Distinctive lexical anchors such as Python, RAG, LLM APIs; [] is allowed.
+        company: Exact company filter; null disables it.
+        location: Exact location filter; null disables it.
+        top_k: Number of distinct jobs, 1 to 20; null defaults to 10.
+    """
     if not isinstance(query, str) or not query.strip():
         raise ToolError("query must be a nonempty natural-language string")
     if not isinstance(keywords, list) or any(not isinstance(word, str) for word in keywords):
@@ -94,6 +128,19 @@ def create_job(
         description: str,
         location: str | None,
 ) -> dict:
+    """Create a new job record from job information provided by the user. Call only when the job title,
+    company, and job description can be clearly extracted from the input. Do not generate job_id
+    yourself; the system generates it internally. If no location is provided, pass null for
+    location.
+
+    Args:
+        title: Job title, for example Software Engineering Intern
+        company: Company name
+        description: Job responsibilities or description; use only information provided by the
+            user and do not add requirements that were not provided
+        location: Job location; pass null if the original information does not explicitly
+            provide it
+    """
     if check_exists(title, company, description, location):
         raise ToolError("job already exists")
     similars = check_similar(title, company, description, location)

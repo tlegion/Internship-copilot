@@ -358,7 +358,7 @@ class JobIndexTests(unittest.TestCase):
         self.assertFalse(params["additionalProperties"])
         self.assertEqual(set(params["required"]), set(params["properties"]))
         for field in ("company", "location", "top_k"):
-            self.assertIn("null", params["properties"][field]["type"])
+            self.assertIn({"type": "null"}, params["properties"][field]["anyOf"])
         with patch.object(tool_call, "request_tool_approval") as approve:
             result = tool_call.run_tool("search_jobs_hybrid", dict(query="Python", keywords=[], company=None, location=None, top_k=None), "call_job")
         approve.assert_not_called()
