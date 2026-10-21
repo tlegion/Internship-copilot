@@ -10,8 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from errors import ProviderError, ToolError
 from rag_lab.chunking import EMBEDDING_MODEL, ENCODING, chunk_documents
-from rag_lab.hybrid_search import hybrid_search
-from rag_lab.reranker import rerank_results
+from rag_lab.dense_search import dense_search
+from rag_lab.bm25_search import bm25_search
 from storages.database import get_evidence_documents, load_indexed_chunks
 
 
@@ -19,7 +19,6 @@ CANDIDATE_MODEL = "gpt-6-luna"
 CANDIDATE_REASONING_EFFORT = "none"
 MAX_CLAIMS = 6
 RETRIEVAL_K = 20
-RERANK_K = 10
 MAX_INPUT_TOKENS = 24000
 MAX_OUTPUT_TOKENS = 4096
 
@@ -183,7 +182,7 @@ def _extract_claims(candidate_id: str, documents: dict[str, dict]) -> list[Atomi
 
 
 def _retrieve_evidence_ids(candidate_id: str, claim: str, documents: dict[str, dict]) -> list[str]:
-    """Retrieve a larger chunk pool, then retain distinct ranked parent IDs."""
+    """Merge Dense and BM25 Top-K chunks and retain distinct parent IDs in first-occurrence order."""
     _check_context_size(claim)
     # Detect missing, partial, or outdated indexes using the existing chunker.
     indexed = load_indexed_chunks(EMBEDDING_MODEL, candidate_id=candidate_id)
@@ -201,21 +200,14 @@ def _retrieve_evidence_ids(candidate_id: str, claim: str, documents: dict[str, d
                "is", "was", "am", "have", "has", "had", "my", "with", "using", "used",
                "candidate", "experience", "built", "developed", "implemented"}
     keywords = list(dict.fromkeys(word for word in words if word.casefold() not in generic))
-    chunks = hybrid_search(
-        query=claim, keywords=keywords, candidate_id=candidate_id,
-        top_k=RETRIEVAL_K, retrieval_k=RETRIEVAL_K,
-    )
-    # Check every retrieved item, including those that might be dropped by reranking.
-    for chunk in chunks:
-        if chunk["candidate_id"] != candidate_id or chunk["evidence_id"] not in documents:
-            raise ToolError("Retrieved evidence is missing or belongs to another candidate")
-    ranked = rerank_results(query=claim, candidates=chunks, top_k=RERANK_K)
+    dense_results = dense_search(claim, indexed, top_k=RETRIEVAL_K)
+    bm25_results = bm25_search(keywords, candidate_id=candidate_id, top_k=RETRIEVAL_K)
     ids = []
     seen = set()
-    for chunk in ranked:
+    for chunk in dense_results + bm25_results:
         evidence_id = chunk["evidence_id"]
         if chunk["candidate_id"] != candidate_id or evidence_id not in documents:
-            raise ToolError("Reranked evidence is missing or belongs to another candidate")
+            raise ToolError("Retrieved evidence is missing or belongs to another candidate")
         if evidence_id not in seen:
             ids.append(evidence_id)
             seen.add(evidence_id)

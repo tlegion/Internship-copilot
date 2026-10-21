@@ -34,15 +34,22 @@ remain visible; do not invent a precise chronology.
 
 ## Evidence and quotations
 
-Verification searches up to 20 fused chunks and retains up to 10 reranked chunks,
-then recovers distinct original parent documents in ranked order. The originating
-document of an extracted claim is also included, even if ranking omitted it.
+Verification independently retrieves up to 20 Dense chunks and up to 20 BM25
+chunks. It merges Dense results first, followed by BM25 results, preserving each
+method's ranked order, then deduplicates by evidence ID in first-occurrence order.
+It does not use RRF, cross-method scoring or an LLM reranker. K limits chunks per
+search, not distinct parent documents: duplicate chunks may yield fewer than K
+parents, while the union of both searches may yield more. There is no second
+parent-document Top-K or extra retrieval to fill a distinct-document quota.
+BM25 may return fewer results or no matches. The originating document of an
+extracted claim is also included, even if neither search selected it.
 The checker receives full original text and trusted IDs, dates, categories and
 source IDs. Overlapping chunks do not create duplicate parent documents.
 
-The existing reranker's fallback to retrieval order is retained. Ranking is a
-retrieval aid, not a factual verdict. Retrieval is bounded and may miss relevant
-documents; a profile verifies at most six claims, not the entire evidence corpus.
+Ranking is a retrieval aid, not a factual verdict. Retrieval is bounded and may
+miss relevant documents; a profile verifies at most six claims, not the entire
+evidence corpus. The generic `search_evidence_hybrid` tool retains its existing
+RRF and reranker behavior independently of this verification workflow.
 
 Evaluate all supplied evidence, including qualifications and counterevidence.
 For the returned explanation, choose zero, one or two exact quotations:
@@ -71,8 +78,8 @@ assessments in `candidate_id` and `assessments`, retaining each claim's
 Evidence establishes what the stored records support, not independent real-world
 truth. API failures, malformed outputs, invalid citations and stale indexes are
 execution errors, not `insufficient_evidence`. Report those errors clearly.
-The reranker's existing API-error fallback is permitted; extraction and checking
-failures propagate. Inputs exceeding the V1 context budget are rejected explicitly,
+Retrieval, extraction and checking failures propagate. Inputs exceeding the V1
+context budget are rejected explicitly,
 without truncating documents or claiming complete assessment.
 
 The extraction and checker models receive the shared developer-controlled rubric

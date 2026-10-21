@@ -14,7 +14,7 @@ from pydantic import ValidationError
 from errors import ProviderError, StorageError, ToolError
 import loop
 from models import ModelProvider, ModelToolCall
-from rag_lab import dense_search, reranker
+from rag_lab import dense_search, hybrid_search, reranker
 from rag_lab.chunking import chunk_documents
 from scripts.migrate_db import MIGRATIONS
 from skill import discover_skills
@@ -66,9 +66,10 @@ class CandidateRecognitionTests(unittest.TestCase):
         self.start_patch(patch.dict(candidate.os.environ, {"OPENAI_API_KEY": "test-only"}))
         self.client = self.start_patch(patch.object(candidate, "OpenAI")).return_value
         self.embed = self.start_patch(patch.object(dense_search, "embedding_texts", return_value=[[1.0, 0.0]]))
-        self.rerank_patcher = patch.object(candidate, "rerank_results",
-                                          side_effect=lambda query, candidates, top_k: candidates[:top_k])
-        self.rerank = self.start_patch(self.rerank_patcher)
+        self.rerank = self.start_patch(patch.object(reranker, "rerank_results",
+            side_effect=AssertionError("Candidate retrieval must not rerank")))
+        self.fusion = self.start_patch(patch.object(hybrid_search, "reciprocal_rank_fusion",
+            side_effect=AssertionError("Candidate retrieval must not use RRF")))
         self.catalog = discover_skills()
         self.loaded = {"candidate-recognition"}
 
@@ -270,7 +271,8 @@ class CandidateRecognitionTests(unittest.TestCase):
     def test_parent_recovery_deduplicates_ranked_ids_and_preserves_metadata(self):
         documents = candidate._load_candidate_evidence("c1")
         self.client.responses.parse.return_value = response(self.assessment())
-        with patch.object(candidate, "hybrid_search", return_value=self.chunks("e1", "e1", "e3", "e2")):
+        with patch.object(candidate, "dense_search", return_value=self.chunks("e1", "e1", "e3")), \
+                patch.object(candidate, "bm25_search", return_value=self.chunks("e1", "e2")):
             ids = candidate._retrieve_evidence_ids("c1", "Django API", documents)
         self.assertEqual(ids, ["e1", "e3", "e2"])
         result = candidate._check_claim("c1", "Django API", ids, documents)
@@ -283,52 +285,109 @@ class CandidateRecognitionTests(unittest.TestCase):
 
     def test_origin_is_preserved_when_retrieval_omits_it(self):
         self.client.responses.parse.side_effect = [response(self.batch()), response(self.assessment())]
-        with patch.object(candidate, "hybrid_search", return_value=self.chunks("e3", "e4")):
+        with patch.object(candidate, "dense_search", return_value=self.chunks("e3")), \
+                patch.object(candidate, "bm25_search", return_value=self.chunks("e4")):
             result = self.call("build_candidate_profile", {"candidate_id": "c1"})
         self.assertTrue(result["success"])
         payload = json.loads(self.client.responses.parse.call_args.kwargs["input"][1]["content"])
         self.assertEqual([d["evidence_id"] for d in payload["evidence"]], ["e3", "e4", "e1"])
 
-    def test_retrieval_retains_lower_ranked_counterevidence_and_literal_keywords(self):
+    def test_independent_chunk_top_k_and_literal_keywords(self):
         claim = "I built a Django REST API using PostgreSQL in C++ and .NET."
         documents = candidate._load_candidate_evidence("c1")
-        with patch.object(candidate, "hybrid_search", return_value=self.chunks("e1", "e2", "e3", "e4")) as search:
+        indexed = database.load_indexed_chunks(candidate.EMBEDDING_MODEL, "c1")
+        with patch.object(candidate, "dense_search", return_value=self.chunks("e1", "e2")) as dense, \
+                patch.object(candidate, "bm25_search", return_value=self.chunks("e3", "e4")) as bm25:
             ids = candidate._retrieve_evidence_ids("c1", claim, documents)
-        self.assertIn("e4", ids)
-        request = search.call_args.kwargs
-        self.assertEqual(request["query"], claim)
+        self.assertEqual(ids, ["e1", "e2", "e3", "e4"])
+        dense.assert_called_once_with(claim, indexed, top_k=20)
+        self.assertEqual(bm25.call_count, 1)
+        request = bm25.call_args.kwargs
         self.assertEqual(request["candidate_id"], "c1")
         self.assertEqual(request["top_k"], 20)
-        self.assertEqual(request["retrieval_k"], 20)
-        self.assertEqual(self.rerank.call_args.kwargs["top_k"], 10)
-        self.assertTrue(all(word in claim for word in request["keywords"]))
-        self.assertIn("PostgreSQL", request["keywords"])
-        self.assertIn("C++", request["keywords"])
-        self.assertIn(".NET", request["keywords"])
+        keywords = bm25.call_args.args[0]
+        self.assertTrue(all(word in claim for word in keywords))
+        self.assertIn("PostgreSQL", keywords)
+        self.assertIn("C++", keywords)
+        self.assertIn(".NET", keywords)
 
-    def test_real_hybrid_search_is_candidate_scoped(self):
+    def test_merge_preserves_first_occurrence_and_deduplicates_across_searches(self):
         documents = candidate._load_candidate_evidence("c1")
-        ids = candidate._retrieve_evidence_ids("c1", "Django REST API", documents)
-        self.assertIn("e1", ids)
-        self.assertNotIn("other", ids)
-        self.assertTrue(all(c["candidate_id"] == "c1" for c in self.rerank.call_args.kwargs["candidates"]))
-        self.embed.assert_called_once_with(["Django REST API"])
+        with patch.object(candidate, "RETRIEVAL_K", 5), \
+                patch.object(candidate, "dense_search", return_value=self.chunks("e1", "e1", "e1", "e2", "e1")) as dense, \
+                patch.object(candidate, "bm25_search", return_value=self.chunks("e1", "e3", "e3", "e1", "e4")) as bm25:
+            ids = candidate._retrieve_evidence_ids("c1", "API", documents)
+        self.assertEqual(ids, ["e1", "e2", "e3", "e4"])
+        dense.assert_called_once()
+        bm25.assert_called_once()
+        self.assertEqual(dense.call_args.kwargs["top_k"], 5)
+        self.assertEqual(bm25.call_args.kwargs["top_k"], 5)
 
-    def test_existing_reranker_api_failure_falls_back_and_checking_continues(self):
-        self.rerank_patcher.stop()
+    def test_one_parent_is_valid_without_refilling_chunk_quota(self):
         self.client.responses.parse.return_value = response(self.assessment())
-        with patch.object(reranker, "OpenAI") as client:
-            client.return_value.responses.parse.side_effect = APIConnectionError(request=Mock())
+        with patch.object(candidate, "RETRIEVAL_K", 5), \
+                patch.object(candidate, "dense_search", return_value=self.chunks("e1", "e1", "e1", "e1", "e1")) as dense, \
+                patch.object(candidate, "bm25_search", return_value=[]) as bm25:
             result = self.call()
         self.assertTrue(result["success"])
-        client.return_value.responses.parse.assert_called_once()
-        self.client.responses.parse.assert_called_once()
+        payload = json.loads(self.client.responses.parse.call_args.kwargs["input"][1]["content"])
+        self.assertEqual(payload["evidence"], [self.documents[0]])
+        dense.assert_called_once()
+        bm25.assert_called_once()
+        self.assertEqual(dense.call_args.kwargs["top_k"], 5)
+        self.assertEqual(bm25.call_args.kwargs["top_k"], 5)
+
+    def test_no_second_parent_top_k_is_applied(self):
+        documents = candidate._load_candidate_evidence("c1")
+        with patch.object(candidate, "RETRIEVAL_K", 2), \
+                patch.object(candidate, "dense_search", return_value=self.chunks("e1", "e2")) as dense, \
+                patch.object(candidate, "bm25_search", return_value=self.chunks("e3", "e4")) as bm25:
+            ids = candidate._retrieve_evidence_ids("c1", "API", documents)
+        self.assertEqual(ids, ["e1", "e2", "e3", "e4"])
+        dense.assert_called_once()
+        bm25.assert_called_once()
+        self.assertEqual(dense.call_args.kwargs["top_k"], 2)
+        self.assertEqual(bm25.call_args.kwargs["top_k"], 2)
+
+    def test_empty_search_results_do_not_drop_the_other_methods_results(self):
+        documents = candidate._load_candidate_evidence("c1")
+        for dense_ids, bm25_ids, expected in ((["e3", "e1"], [], ["e3", "e1"]),
+                                             ([], ["e2"], ["e2"])):
+            with self.subTest(dense=dense_ids, bm25=bm25_ids), \
+                    patch.object(candidate, "dense_search", return_value=self.chunks(*dense_ids)) as dense, \
+                    patch.object(candidate, "bm25_search", return_value=self.chunks(*bm25_ids)) as bm25:
+                self.assertEqual(candidate._retrieve_evidence_ids("c1", "API", documents), expected)
+            dense.assert_called_once()
+            bm25.assert_called_once()
+
+    def test_real_dense_and_bm25_searches_are_candidate_scoped(self):
+        documents = candidate._load_candidate_evidence("c1")
+        with patch.object(candidate, "dense_search", wraps=candidate.dense_search) as dense, \
+                patch.object(candidate, "bm25_search", wraps=candidate.bm25_search) as bm25:
+            ids = candidate._retrieve_evidence_ids("c1", "Django REST API", documents)
+        self.assertIn("e1", ids)
+        self.assertNotIn("other", ids)
+        self.assertTrue(all(c["candidate_id"] == "c1" for c in dense.call_args.args[1]))
+        self.assertEqual(bm25.call_args.kwargs["candidate_id"], "c1")
+        self.embed.assert_called_once_with(["Django REST API"])
+
+    def test_both_workflows_use_no_rrf_or_reranker(self):
+        self.client.responses.parse.side_effect = [response(self.assessment()),
+            response(self.batch()), response(self.assessment())]
+        with patch.object(reranker, "OpenAI") as rerank_client:
+            self.assertTrue(self.call()["success"])
+            self.assertTrue(self.call("build_candidate_profile", {"candidate_id": "c1"})["success"])
+        self.rerank.assert_not_called()
+        self.fusion.assert_not_called()
+        rerank_client.assert_not_called()
+        self.assertEqual(self.client.responses.parse.call_count, 3)
 
     def test_invalid_retrieved_or_recovered_ids_fail_explicitly(self):
         documents = candidate._load_candidate_evidence("c1")
         for chunk in (dict(candidate_id="c2", evidence_id="other"),
                       dict(candidate_id="c1", evidence_id="missing")):
-            with patch.object(candidate, "hybrid_search", return_value=[chunk]):
+            with patch.object(candidate, "dense_search", return_value=[chunk]), \
+                    patch.object(candidate, "bm25_search", return_value=[]):
                 with self.assertRaises(ToolError):
                     candidate._retrieve_evidence_ids("c1", "API", documents)
         for evidence_id in ("missing", "other"):
@@ -339,13 +398,14 @@ class CandidateRecognitionTests(unittest.TestCase):
             candidate._check_claim("c1", "API", ["e1"], documents)
         self.client.responses.parse.assert_not_called()
 
-    def test_cross_candidate_or_missing_reranked_items_are_rejected(self):
+    def test_cross_candidate_or_missing_bm25_items_are_rejected(self):
         documents = candidate._load_candidate_evidence("c1")
         for item in (dict(candidate_id="c2", evidence_id="other"),
+                     dict(candidate_id="c2", evidence_id="e1"),
                      dict(candidate_id="c1", evidence_id="missing")):
-            self.rerank.side_effect = None
-            self.rerank.return_value = [item]
-            with self.assertRaises(ToolError):
+            with patch.object(candidate, "dense_search", return_value=self.chunks("e1")), \
+                    patch.object(candidate, "bm25_search", return_value=[item]), \
+                    self.assertRaises(ToolError):
                 candidate._retrieve_evidence_ids("c1", "API", documents)
         self.client.responses.parse.assert_not_called()
 
@@ -363,6 +423,17 @@ class CandidateRecognitionTests(unittest.TestCase):
                     candidate._retrieve_evidence_ids("c1", "API", documents)
         self.embed.assert_not_called()
 
+    def test_cross_candidate_index_and_bm25_storage_failures_are_errors(self):
+        documents = candidate._load_candidate_evidence("c1")
+        indexed = database.load_indexed_chunks(candidate.EMBEDDING_MODEL, "c1")
+        indexed[0]["candidate_id"] = "c2"
+        with patch.object(candidate, "load_indexed_chunks", return_value=indexed):
+            with self.assertRaisesRegex(ToolError, "another candidate"):
+                candidate._retrieve_evidence_ids("c1", "API", documents)
+        with patch.object(candidate, "bm25_search", side_effect=StorageError("BM25 unavailable")):
+            self.assertEqual(self.call()["error_type"], "StorageError")
+        self.client.responses.parse.assert_not_called()
+
     def test_supported_contradicted_and_insufficient_results_are_distinct(self):
         cases = [("I built a Django API for a university project.", self.assessment()),
             ("I made the stated production deployment.", self.assessment("contradicted", [
@@ -377,7 +448,8 @@ class CandidateRecognitionTests(unittest.TestCase):
 
     def test_successful_empty_retrieval_can_produce_insufficient_evidence(self):
         self.client.responses.parse.return_value = response(self.assessment("insufficient_evidence", []))
-        with patch.object(candidate, "hybrid_search", return_value=[]):
+        with patch.object(candidate, "dense_search", return_value=[]), \
+                patch.object(candidate, "bm25_search", return_value=[]):
             result = self.call()
         self.assertEqual(result["result"]["verdict"], "insufficient_evidence")
         payload = json.loads(self.client.responses.parse.call_args.kwargs["input"][1]["content"])
