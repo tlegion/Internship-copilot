@@ -22,9 +22,11 @@ Optional frontmatter is preserved without granting tool authorization.
    relative to that directory and refuses resolved paths outside it.
 
 Base tools remain available with their original schemas, handlers and approval
-settings. `SKILL_TOOL_LIST` and `SKILL_TOOL_SCHEMAS` are explicit developer-maintained
-mappings in `tool_call.py`; this milestone intentionally leaves them empty.
-The demonstration Skill uses the existing job tools, without new business actions.
+settings. `SKILL_TOOL_LIST` is an explicit developer-maintained mapping in
+`tool_call.py`; schemas are generated from its trusted handlers. The
+`candidate-recognition` Skill gates the read-only `build_candidate_profile` and
+`verify_candidate_claim` tools. The `job-comparison` Skill uses the existing job
+tools. Generic `search_evidence_hybrid` remains a base tool.
 Schema visibility and execution both use `get_available_tools()`, which copies
 the base registry instead of mutating it. No loaded-state set is module-global.
 

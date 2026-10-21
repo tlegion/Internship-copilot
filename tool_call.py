@@ -8,6 +8,7 @@ from tools.jobs import lookup_job, create_job, list_jobs, search_jobs_hybrid
 from approval import request_tool_approval
 from errors import HarnessError
 from tools.evidence import search_evidence_hybrid
+from tools.candidate import build_candidate_profile, verify_candidate_claim
 from skill import load_skill, read_skill_resource
 
 tool_list= {
@@ -37,7 +38,18 @@ tool_list= {
 BASE_TOOL_LIST = tool_list
 
 # Developer-maintained executable registrations; Skill files cannot add these.
-SKILL_TOOL_LIST = {}
+SKILL_TOOL_LIST = {
+    "candidate-recognition": {
+        "build_candidate_profile": {
+            "handler": build_candidate_profile,
+            "requires_approval": False,
+        },
+        "verify_candidate_claim": {
+            "handler": verify_candidate_claim,
+            "requires_approval": False,
+        },
+    },
+}
 
 
 def get_function_schema(name, handler):
