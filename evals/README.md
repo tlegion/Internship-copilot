@@ -117,11 +117,25 @@ Each live run creates `evals/runs/<UTC>_<git-sha>_<run-id>/` before preparation:
 - `trace.jsonl`: append-only, flushed/fsynced structured events, real request and
   response bodies, Tool calls/results/errors, approvals, validation failures,
   API latency and usage when supplied by the SDK. Headers and keys are excluded
-  or redacted. Only synthetic fixture data belongs in live evaluations.
-- `assertions.json`, `grades.json`, `summary.json`: atomic report replacements,
-  updated after each case and finalized on normal failure or interruption.
+  or redacted. Database-state events use `format_version: 2`: each table has
+  before/after row counts, presence flags and SHA-256 hashes of its complete
+  contents. Identifiable changed rows include IDs and relevant field changes;
+  embeddings, blobs and long values use hashes/lengths instead of full repeated
+  values (long text also has a short preview). Full states stay in memory for
+  exact assertions. Only synthetic fixture data belongs in live evaluations.
+- `summary.json`: full scenario results, including every assertion and grade,
+  atomically replaced after each case and finalized on failure or interruption.
 - `prepared.sqlite` and `prepared.json`: reusable, synthetic prepared snapshot and
   fingerprints, when preparation completed.
+
+New completed preparations produce these five files. Separate `assertions.json`
+and `grades.json` are no longer generated. Historical run directories are left
+untouched: their existing summaries and optional duplicate report files remain
+readable, and older `database_state` events retain full `before`/`after` payloads.
+Table hashes use UTF-8 JSON with sorted keys, compact separators and rows sorted
+by that same canonical representation; duplicate rows still contribute to the hash.
+Logging changes do not alter snapshot fingerprints or validation, so previously
+valid prepared snapshots remain reusable.
 
 Inspect the first failed assertion, its Tool output and matching request number,
 then the independent grade. `api` distinguishes Main Agent, embeddings, reranking,
