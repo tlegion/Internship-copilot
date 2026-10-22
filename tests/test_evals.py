@@ -617,7 +617,8 @@ class EvalTests(unittest.TestCase):
             text=True,
         ).strip()
 
-        self.assertEqual(metadata["git_branch"], actual_branch)        self.assertIsInstance(metadata["dirty"], bool)
+        self.assertEqual(metadata["git_branch"], actual_branch)
+        self.assertIsInstance(metadata["dirty"], bool)
         if metadata["dirty"]:
             self.assertEqual(len(metadata["dirty_fingerprint"]), 64)
 
