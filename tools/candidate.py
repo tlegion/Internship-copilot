@@ -79,6 +79,25 @@ role supports, contradicts, or qualifies. Use at most one quote per evidence ID;
 do not repeat identical quotes. Supported and contradicted verdicts require at
 least one direct quotation with the corresponding role. Insufficient evidence may
 have no quotations. Return no invented metadata or IDs outside the supplied context.
+Before finalizing your output, ensure that:
+
+- Every quote is copied verbatim from the specified
+  evidence text, without paraphrasing or editing.
+- All selected evidence IDs exist in the supplied context.
+- No evidence ID or quotation is repeated.
+- A supported verdict includes a supports quotation.
+- A contradicted verdict includes a contradicts quotation.
+- A quotation that merely limits a claim's scope
+  should be marked qualifies, not contradicts.
+
+Distinguish "the evidence only proves a narrower
+claim" from "the evidence proves the broader claim
+is false."
+
+For example, evidence that a server configuration
+performed best among tested workloads does not
+establish or refute its optimality across every
+possible workload.
 """
 
 
