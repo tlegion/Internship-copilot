@@ -17,6 +17,7 @@ from storages.database import get_evidence_documents, load_indexed_chunks
 
 CANDIDATE_MODEL = "gpt-6-luna"
 CANDIDATE_REASONING_EFFORT = "none"
+MAX_CHECK_ATTEMPTS = 3
 MAX_CLAIMS = 6
 RETRIEVAL_K = 20
 MAX_INPUT_TOKENS = 24000
@@ -116,9 +117,16 @@ def _check_context_size(text: str) -> None:
         raise ToolError("Candidate context exceeds the V1 input budget; no evidence was truncated")
 
 
-def _parse_candidate_output(prompt: str, payload: dict, output_model: type[OutputModel]) -> OutputModel:
-    content = json.dumps(payload, ensure_ascii=False)
-    _check_context_size(prompt + content + json.dumps(output_model.model_json_schema()))
+def _parse_candidate_output(prompt: str, payload: dict, output_model: type[OutputModel],
+                            *, messages: list[dict[str, str]] | None = None) -> OutputModel:
+    if messages is None:
+        content = json.dumps(payload, ensure_ascii=False)
+        messages = [{"role": "system", "content": prompt},
+                    {"role": "user", "content": content}]
+        budget_input = prompt + content
+    else:
+        budget_input = json.dumps(messages, ensure_ascii=False)
+    _check_context_size(budget_input + json.dumps(output_model.model_json_schema()))
     load_dotenv(Path(__file__).resolve().parents[1] / ".env")
     if not os.environ.get("OPENAI_API_KEY"):
         raise ProviderError("missing API key: OpenAI candidate recognition")
@@ -126,8 +134,7 @@ def _parse_candidate_output(prompt: str, payload: dict, output_model: type[Outpu
     try:
         response = client.responses.parse(
             model=CANDIDATE_MODEL,
-            input=[{"role": "system", "content": prompt},
-                   {"role": "user", "content": content}],
+            input=messages,
             text_format=output_model,
             reasoning={"effort": CANDIDATE_REASONING_EFFORT},
             max_output_tokens=MAX_OUTPUT_TOKENS,
@@ -214,25 +221,7 @@ def _retrieve_evidence_ids(candidate_id: str, claim: str, documents: dict[str, d
     return ids
 
 
-def _check_claim(candidate_id: str, claim: str, evidence_ids: list[str],
-                 documents: dict[str, dict], source_evidence_id: str | None = None) -> dict:
-    ids = list(dict.fromkeys(evidence_ids))
-    if source_evidence_id is not None and source_evidence_id not in ids:
-        ids.append(source_evidence_id)
-    context = {}
-    for evidence_id in ids:
-        document = documents.get(evidence_id)
-        if document is None or document["candidate_id"] != candidate_id:
-            raise ToolError("Recovered evidence is missing or belongs to another candidate")
-        context[evidence_id] = document
-
-    assessment = _parse_candidate_output(
-        CHECKER_PROMPT,
-        {"candidate_id": candidate_id, "claim": claim, "evidence": list(context.values())},
-        ClaimAssessment,
-    )
-    if not assessment.is_atomic:
-        raise ToolError("claim must express one specific, verifiable factual assertion")
+def _validate_check_assessment(assessment: ClaimAssessment, context: dict[str, dict]) -> list[dict]:
     if not assessment.reason.strip():
         raise ToolError("Claim assessment reason must not be empty")
     selected = []
@@ -257,6 +246,47 @@ def _check_claim(candidate_id: str, claim: str, evidence_ids: list[str],
     required_role = {"supported": "supports", "contradicted": "contradicts"}.get(assessment.verdict)
     if required_role and not any(item["role"] == required_role for item in selected):
         raise ToolError("Decisive verdict requires a corresponding exact evidence quotation")
+    return selected
+
+
+def _check_claim(candidate_id: str, claim: str, evidence_ids: list[str],
+                 documents: dict[str, dict], source_evidence_id: str | None = None) -> dict:
+    ids = list(dict.fromkeys(evidence_ids))
+    if source_evidence_id is not None and source_evidence_id not in ids:
+        ids.append(source_evidence_id)
+    context = {}
+    for evidence_id in ids:
+        document = documents.get(evidence_id)
+        if document is None or document["candidate_id"] != candidate_id:
+            raise ToolError("Recovered evidence is missing or belongs to another candidate")
+        context[evidence_id] = document
+
+    payload = {"candidate_id": candidate_id, "claim": claim, "evidence": list(context.values())}
+    messages = [{"role": "system", "content": CHECKER_PROMPT},
+                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}]
+    for attempt in range(1, MAX_CHECK_ATTEMPTS + 1):
+        assessment = _parse_candidate_output(
+            CHECKER_PROMPT, payload, ClaimAssessment, messages=list(messages),
+        )
+        if not assessment.is_atomic:
+            raise ToolError("claim must express one specific, verifiable factual assertion")
+        try:
+            selected = _validate_check_assessment(assessment, context)
+        except ToolError as error:
+            if attempt == MAX_CHECK_ATTEMPTS:
+                raise ToolError(f"Checker failed after {attempt} attempts: {error}") from error
+            messages.extend([
+                {"role": "assistant", "content": assessment.model_dump_json()},
+                {"role": "user", "content": (
+                    f"Python validation failed: {error}\n"
+                    "Regenerate a complete, corrected ClaimAssessment. Reconsider the entire "
+                    "assessment, including the verdict, against the original claim and full evidence. "
+                    "Do not merely change citation roles to pass validation. If no evidence genuinely "
+                    "contradicts the claim, do not relabel a qualifying quotation as contradicts."
+                )},
+            ])
+            continue
+        break
     result = {
         "candidate_id": candidate_id,
         "claim": claim,
@@ -284,7 +314,7 @@ def build_candidate_profile(candidate_id: str) -> dict:
     for item in claims:
         retrievals.append(_retrieve_evidence_ids(candidate_id, item.claim, documents))
 
-    # Second loop: recover originals and assess each claim once with the shared Checker.
+    # Second loop: recover originals and assess each claim with the shared Checker.
     assessments = []
     for item, evidence_ids in zip(claims, retrievals, strict=True):
         assessments.append(_check_claim(

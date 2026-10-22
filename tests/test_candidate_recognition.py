@@ -535,6 +535,138 @@ class CandidateRecognitionTests(unittest.TestCase):
             self.client.responses.parse.return_value = response(self.assessment(verdict, []))
             self.assertEqual(self.call()["error_type"], "ToolError")
 
+    def test_checker_attempt_limit_history_and_retrieval_once(self):
+        invalid = [self.assessment(reason="  "), self.assessment(citations=[])]
+        errors = ["Claim assessment reason must not be empty",
+                  "Decisive verdict requires a corresponding exact evidence quotation"]
+        for failures in range(4):
+            with self.subTest(failures=failures):
+                self.client.responses.parse.reset_mock()
+                failed = (invalid + invalid[:1])[:failures]
+                outputs = failed + ([] if failures == 3 else [self.assessment()])
+                self.client.responses.parse.side_effect = [response(item) for item in outputs]
+                with patch.object(candidate, "_retrieve_evidence_ids", return_value=["e1"]) as retrieve:
+                    result = self.call()
+                self.assertEqual(result["success"], failures < 3)
+                retrieve.assert_called_once()
+                calls = self.client.responses.parse.call_args_list
+                self.assertEqual(len(calls), min(failures + 1, 3))
+                original = calls[0].kwargs["input"][:2]
+                for attempt, call in enumerate(calls):
+                    request = call.kwargs
+                    messages = request["input"]
+                    self.assertEqual(messages[:2], original)
+                    self.assertEqual(len(messages), 2 + attempt * 2)
+                    self.assertEqual(request["text_format"], candidate.ClaimAssessment)
+                    self.assertEqual(request["model"], "gpt-6-luna")
+                    self.assertEqual(request["reasoning"], {"effort": "none"})
+                    self.assertIs(request["store"], False)
+                    for previous in range(attempt):
+                        self.assertEqual(messages[2 + previous * 2]["role"], "assistant")
+                        self.assertEqual(json.loads(messages[2 + previous * 2]["content"]),
+                                         failed[previous].model_dump())
+                        feedback = messages[3 + previous * 2]
+                        self.assertEqual(feedback["role"], "user")
+                        self.assertIn("Python validation failed: " + errors[previous], feedback["content"])
+                if failures == 3:
+                    self.assertIn("3 attempts", result["error_msg"])
+                    self.assertIn(errors[0], result["error_msg"])
+
+    def test_profile_retries_keep_history_local_to_each_claim_and_call(self):
+        batch = self.batch([("Django project", "e1"), ("SQL project", "e3")])
+        invalid = self.assessment(reason=" ")
+        sql = self.assessment(citations=[dict(evidence_id="e3", role="supports",
+                                            quote=self.documents[2]["text"])])
+        self.client.responses.parse.side_effect = [response(item) for item in
+            (batch, invalid, self.assessment(), invalid, sql, self.assessment())]
+        with patch.object(candidate, "_retrieve_evidence_ids", side_effect=[["e1"], ["e3"], ["e1"]]) as retrieve:
+            result = self.call("build_candidate_profile", {"candidate_id": "c1"})
+            self.assertTrue(result["success"])
+            self.assertEqual(len(result["result"]["assessments"]), 2)
+            self.assertTrue(self.call()["success"])
+        self.assertEqual(retrieve.call_count, 3)
+        calls = self.client.responses.parse.call_args_list
+        self.assertEqual([len(call.kwargs["input"]) for call in calls], [2, 2, 4, 2, 4, 2])
+        self.assertEqual(json.loads(calls[3].kwargs["input"][1]["content"])["claim"], "SQL project")
+        self.assertEqual(json.loads(calls[4].kwargs["input"][2]["content"]), invalid.model_dump())
+
+    def test_profile_exhaustion_fails_whole_profile(self):
+        self.client.responses.parse.side_effect = [response(self.batch()),
+                                                  *[response(self.assessment(citations=[]))] * 3]
+        result = self.call("build_candidate_profile", {"candidate_id": "c1"})
+        self.assertFalse(result["success"])
+        self.assertIn("3 attempts", result["error_msg"])
+        self.assertNotIn("result", result)
+        self.assertEqual(self.client.responses.parse.call_count, 4)
+
+    def test_retry_budget_counts_complete_history_before_next_api_call(self):
+        documents = candidate._load_candidate_evidence("c1")
+        invalid = self.assessment(reason=" ")
+        self.client.responses.parse.return_value = response(invalid)
+        checked = []
+        original_guard = candidate._check_context_size
+        first_messages = [{"role": "system", "content": candidate.CHECKER_PROMPT},
+                          {"role": "user", "content": json.dumps(
+                              {"candidate_id": "c1", "claim": "API", "evidence": [documents["e1"]]},
+                              ensure_ascii=False)}]
+        first_input = json.dumps(first_messages, ensure_ascii=False) + json.dumps(
+            candidate.ClaimAssessment.model_json_schema())
+        limit = len(candidate.ENCODING.encode(first_input, disallowed_special=()))
+
+        def guard(text):
+            checked.append(text)
+            original_guard(text)
+
+        with patch.object(candidate, "MAX_INPUT_TOKENS", limit), \
+                patch.object(candidate, "_check_context_size", side_effect=guard):
+            with self.assertRaisesRegex(ToolError, "V1 input budget"):
+                candidate._check_claim("c1", "API", ["e1"], documents)
+        self.assertEqual(self.client.responses.parse.call_count, 1)
+        self.assertGreater(len(checked[1]), len(checked[0]))
+        self.assertIn("Python validation failed", checked[1])
+        self.assertIn(json.dumps(candidate.ClaimAssessment.model_json_schema()), checked[1])
+        messages = json.loads(checked[1][:-len(json.dumps(candidate.ClaimAssessment.model_json_schema()))])
+        self.assertEqual(json.loads(messages[2]["content"]), invalid.model_dump())
+        self.assertEqual(json.loads(messages[1]["content"])["evidence"], [documents["e1"]])
+
+    def test_unrelated_errors_never_regenerate(self):
+        for error in (ProviderError("provider"), StorageError("storage"), ToolError("index outdated")):
+            with self.subTest(error=error):
+                self.client.responses.parse.reset_mock()
+                with patch.object(candidate, "_retrieve_evidence_ids", side_effect=error) as retrieve:
+                    self.assertFalse(self.call()["success"])
+                retrieve.assert_called_once()
+                self.client.responses.parse.assert_not_called()
+        for output in (response(self.assessment(is_atomic=False)), APIConnectionError(request=Mock())):
+            self.client.responses.parse.reset_mock()
+            self.client.responses.parse.side_effect = [output]
+            self.assertFalse(self.call()["success"])
+            self.assertEqual(self.client.responses.parse.call_count, 1)
+        documents = candidate._load_candidate_evidence("c1")
+        documents["e1"]["candidate_id"] = "c2"
+        self.client.responses.parse.reset_mock()
+        with self.assertRaisesRegex(ToolError, "another candidate"):
+            candidate._check_claim("c1", "API", ["e1"], documents)
+        self.client.responses.parse.assert_not_called()
+
+    def test_provider_failure_during_correction_stops_immediately(self):
+        self.client.responses.parse.side_effect = [response(self.assessment(reason=" ")),
+                                                  APIConnectionError(request=Mock())]
+        self.assertEqual(self.call()["error_type"], "ProviderError")
+        self.assertEqual(self.client.responses.parse.call_count, 2)
+
+    def test_qualifying_quote_correction_reconsiders_verdict(self):
+        quote = dict(evidence_id="e1", role="qualifies", quote="Built a REST API")
+        invalid = self.assessment("contradicted", [quote])
+        corrected = self.assessment("insufficient_evidence", [quote])
+        self.client.responses.parse.side_effect = [response(invalid), response(corrected)]
+        result = self.call()
+        self.assertEqual(result["result"]["verdict"], "insufficient_evidence")
+        self.assertEqual(result["result"]["selected_evidence"][0]["role"], "qualifies")
+        messages = self.client.responses.parse.call_args.kwargs["input"]
+        self.assertIn("Reconsider the entire assessment", messages[-1]["content"])
+        self.assertIn("do not relabel a qualifying quotation as contradicts", messages[-1]["content"])
+
     def test_both_stages_use_fixed_model_effort_and_shared_rubric(self):
         self.client.responses.parse.side_effect = [response(self.batch()), response(self.assessment())]
         result = self.call("build_candidate_profile", {"candidate_id": "c1"})

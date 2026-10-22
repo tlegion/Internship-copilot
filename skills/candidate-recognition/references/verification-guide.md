@@ -68,6 +68,25 @@ Decisive verdicts require a quotation with the corresponding role; insufficient
 evidence can have no quotations. Python checks IDs, scope, duplicates and exact
 substring inclusion, and attaches metadata from the database.
 
+## Checker regeneration
+
+Both public tools use the same Checker with at most three generations per claim:
+one initial attempt and up to two corrections for deterministic Python business
+validation failures. Each correction receives the unchanged original claim and full
+evidence, followed by every failed assessment as JSON and its exact validation
+feedback in chronological order. History is local to that claim. Retrieval runs
+once per claim and is not repeated for corrections.
+
+Corrections must reconsider the complete assessment, including its verdict. A
+scope-qualifying quotation must not be relabeled as contradiction merely to pass
+validation. Python validates structure and source fidelity; semantic correctness
+still depends on the Checker. After three invalid assessments, the tool raises an
+execution error with the attempt count and final reason. Any exhausted claim fails
+the whole profile. Provider or malformed-output errors, storage/index errors,
+ownership errors and non-atomic claims propagate without regeneration. The full
+input, including accumulated history, must fit the V1 budget; overflow fails
+explicitly without truncation.
+
 ## Interpreting results and limitations
 
 Single-claim results preserve `candidate_id` and the original `claim`, followed
