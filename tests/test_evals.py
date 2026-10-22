@@ -8,6 +8,7 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+import subprocess
 
 import httpx2 as httpx
 
@@ -610,8 +611,13 @@ class EvalTests(unittest.TestCase):
     def test_git_metadata_records_head_branch_and_dirty_content_fingerprint(self):
         metadata = git_metadata()
         self.assertEqual(len(metadata["git_sha"]), 40)
-        self.assertEqual(metadata["git_branch"], "stage3")
-        self.assertIsInstance(metadata["dirty"], bool)
+        actual_branch = subprocess.check_output(
+            ["git", "branch", "--show-current"],
+            cwd=ROOT,
+            text=True,
+        ).strip()
+
+        self.assertEqual(metadata["git_branch"], actual_branch)        self.assertIsInstance(metadata["dirty"], bool)
         if metadata["dirty"]:
             self.assertEqual(len(metadata["dirty_fingerprint"]), 64)
 
