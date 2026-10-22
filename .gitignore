@@ -227,3 +227,5 @@ data/*.db-shm
 
 # macOS
 .DS_Store
+# Durable local synthetic evaluation traces and prepared snapshots
+evals/runs/

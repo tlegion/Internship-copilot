@@ -99,8 +99,18 @@ Rules:
 def conversation_loop(
         provider:ModelProvider= ModelProvider.OPENAI, 
         model:str= "gpt-6-luna", 
-        max_round:int = 10, max_step:int = 3
+        max_round:int = 10, max_step:int = 3,
+        *, input_reader=None, event_sink=None, max_tool_call:int = 10,
     ):
+    # Optional seams use the same conversation/tool path as the interactive CLI.
+    read_input = input_reader or get_user_input
+
+    def publish(item):
+        if event_sink is None:
+            display_item(item)
+        else:
+            event_sink(item)
+
     history = []
     catalog = discover_skills()
     loaded_skills = set()
@@ -109,11 +119,13 @@ def conversation_loop(
 
 
     while not user_ended and round <= max_round:
-        user_input = get_user_input(round)
+        user_input = read_input(round)
 
         if user_input is None:
             break
         history.append(user_input)
+        if event_sink is not None:
+            event_sink(user_input)
         try:
             response = call_model(
                 provider, model,
@@ -123,11 +135,12 @@ def conversation_loop(
             )
         except HarnessError as error:
             response = {"error_msg": str(error)}
-            display_item(response)
+            publish(response)
+            round += 1
             continue
 
         history.append(response)
-        display_item(response)
+        publish(response)
 
 
         if tool_calls := getattr(response, "tool_calls", None):
@@ -136,13 +149,13 @@ def conversation_loop(
 
                 if tool_calls := getattr(response, "tool_calls", None):
                     
-                    tool_outputs= tool_loop(tool_calls, provider, round, step,
+                    tool_outputs= tool_loop(tool_calls, provider, round, step, max_tool_call,
                                             catalog=catalog, loaded_skills=loaded_skills)
                     step += 1
 
                     history.extend(tool_outputs)
                     for output in tool_outputs:
-                        display_item(output)
+                        publish(output)
                     if step > max_step:
                         tool_choice = "none"
                     else:
@@ -157,10 +170,10 @@ def conversation_loop(
                         )
                     except HarnessError as error:
                         response = {"error_msg": str(error)}
-                        display_item(response)
+                        publish(response)
                         break
                     history.append(response)
-                    display_item(response)
+                    publish(response)
                 else:
                     break
 
@@ -168,6 +181,7 @@ def conversation_loop(
 
         round += 1
 
+    return history
 
 
 def start_conversation_OpenAI():
