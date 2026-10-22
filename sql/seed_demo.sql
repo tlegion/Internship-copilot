@@ -1,0 +1,22 @@
+INSERT OR IGNORE INTO jobs (id, title, company, description, location)
+VALUES
+    ('job_001', 'Backend Software Engineering Intern', 'Demo Harbour Software',
+     'Build Python REST APIs backed by SQL databases. Validate request data, write integration tests, and debug backend services with the engineering team.', 'Sydney'),
+    ('job_002', 'AI Engineering Intern', 'Demo Harbour AI',
+     'Develop LLM applications in Python. Integrate model APIs and external services, handle API errors, and evaluate the quality of application responses.', 'Sydney'),
+    ('job_003', 'Machine Learning Intern', 'Demo Vision Lab',
+     'Use PyTorch for computer vision experiments and model evaluation. Compare image classifiers with reproducible benchmarks and analyse robustness under image transformations.', 'Melbourne'),
+    ('job_004', 'Data Engineering Intern', 'Demo Data Works',
+     'Build Python and SQL ETL data pipelines for CSV and JSON sources. Validate records, remove duplicates, and maintain reliable transformations and reporting queries.', 'Sydney'),
+    ('job_005', 'Platform / DevOps Intern', 'Demo Cloud Platform',
+     'Package services with Docker and maintain CI/CD workflows in GitHub Actions. Configure AWS deployment environments, automate builds and tests, and troubleshoot failed deployments.', 'Remote'),
+    ('job_006', 'Full Stack Engineering Intern', 'Demo Web Studio',
+     'Build React and TypeScript interfaces that consume REST APIs backed by SQL. Implement state management and form validation, and debug frontend/backend integration.', 'Sydney'),
+    ('job_007', 'Software Test / QA Automation Intern', 'Demo Quality Systems',
+     'Write pytest automated testing suites for Python services. Use mocks for unit tests, perform integration testing and API validation, and add regression coverage for reported defects.', 'Sydney'),
+    ('job_008', 'Systems / Simulation Engineering Intern', 'Demo Service Analytics',
+     'Develop Python discrete-event simulation models of queueing and stochastic systems. Compare resource allocations, validate random workloads, and report statistical uncertainty.', 'Melbourne'),
+    ('job_009', 'AI Application / RAG Intern', 'Demo Retrieval Systems',
+     'Build Python RAG applications using embeddings and vector search. Connect dense retrieval to LLM function calling, execute tools within bounded loops, and store evidence in SQLite.', 'Sydney'),
+    ('job_010', 'Research Engineering Intern', 'Demo Robust Vision Research',
+     'Support computer vision research with PyTorch evaluation pipelines. Run robustness evaluation across generators and image transformations, and maintain reproducible experiments and clear benchmark reports.', 'Remote');

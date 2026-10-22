@@ -1,0 +1,10 @@
+[
+  {
+    "evidence_id": "ev_isolation_foreign_001",
+    "candidate_id": "synthetic_other",
+    "source_id": "synthetic-isolation-lab",
+    "category": "project",
+    "date": "2026-09",
+    "text": "Explicitly synthetic isolation fixture: only candidate synthetic_other built a COBOL payroll prototype. This record says nothing about candidate test_1."
+  }
+]

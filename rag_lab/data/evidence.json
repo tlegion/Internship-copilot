@@ -1,0 +1,82 @@
+[
+  {
+    "evidence_id": "ev_backend_001",
+    "candidate_id": "candidate_001",
+    "source_id": "health_alerts_backend",
+    "category": "backend_engineering",
+    "date": "2026-02_to_2026-05",
+    "text": "Implemented the backend AI subsystem for a team health-alert application using Django REST Framework. Integrated Gemini services with the shared alert data model and exposed backend functionality through the application's REST API.\n\nBuilt date- and location-based retrieval for relevant health alerts and cached disease context so repeated requests did not require the same supporting data to be rebuilt. Added validation and persistent caches for disease metadata and country-risk results, including refresh handling for new, expired, and failed entries.\n\nDiagnosed a bug in geographic prefix matching that caused incorrect location-based retrieval. Traced the problem through the backend retrieval logic, corrected the matching behaviour, and verified that the relevant alert data was returned for the intended locations.\n\nThe project provided practical experience with REST APIs, Django backend development, validation, caching, external AI-service integration, structured data retrieval, and debugging application behaviour across multiple backend components."
+  },
+  {
+    "evidence_id": "ev_ml_001",
+    "candidate_id": "candidate_001",
+    "source_id": "synthetic_face_research",
+    "category": "machine_learning",
+    "date": "2026-06_to_present",
+    "text": "Conducted Honours thesis work on generalizable detection of AI-generated face images. Configured five released synthetic-image detector checkpoints and two generator pipelines, then benchmarked four detectors on face images produced by GAN- and diffusion-based generators.\n\nEvaluated both same-generator and cross-generator performance using AUC and average precision. Ran 250 real and 250 synthetic images per generator configuration so detector behaviour could be compared consistently across experimental conditions.\n\nTested robustness under JPEG compression, cropping, resizing, and StyleGAN3 truncation. These experiments examined whether detector performance remained stable when image characteristics or generation conditions differed from those seen in the baseline evaluation.\n\nDocumented the benchmark design, experimental results, and implementation limitations in the Thesis A report. The work developed practical experience with PyTorch-based evaluation pipelines, model benchmarking, robustness analysis, distribution changes, reproducible experiments, and interpretation of machine-learning metrics."
+  },
+  {
+    "evidence_id": "ev_simulation_001",
+    "candidate_id": "candidate_001",
+    "source_id": "service_system_simulation",
+    "category": "systems_modelling",
+    "date": "2026-02_to_2026-05",
+    "text": "Developed a Python discrete-event simulator for a service system with two server groups, FIFO queues, job redirection, trace inputs, and seeded stochastic workloads. The simulator tracked queue and server state as events changed the system over simulated time.\n\nTested 11 different allocations of a fixed 12-server system through repeated simulation runs. Compared the configurations under the modelled workload and found that a 6/6 split performed best among the tested allocations.\n\nUsed common random numbers and paired 95% confidence intervals to compare competing configurations while controlling experimental noise. Fixed random seeds and validated stochastic samples against target service-time and inter-arrival-time distributions so experiments could be reproduced and checked.\n\nThe project provided practical experience with queueing behaviour, stochastic systems, discrete-event simulation, experimental design, statistical comparison, reproducibility, and debugging stateful software whose behaviour emerges over long event sequences."
+  },
+  {
+    "evidence_id": "ev_database_001",
+    "candidate_id": "candidate_001",
+    "source_id": "database_service_project",
+    "category": "database_engineering",
+    "date": "2026-09_mock_lab",
+    "text": "Built a mock database service using PostgreSQL for shared development and SQLite for local experiments. Modelled related customer, request, and status tables, and wrote SQL SELECT queries to retrieve the records needed by REST API endpoints.\n\nUsed JOIN operations to combine request records with customer details and GROUP BY aggregates to report request counts and processing times. Checked results against small hand-built datasets, including empty groups and missing relationships, to validate reporting behaviour.\n\nDebugged slow queries by inspecting query plans and identifying repeated full-table scans. Added indexes on frequently filtered columns and join keys, then compared execution plans and timings to check whether those indexes improved database performance.\n\nUsed transactions to keep related inserts and status updates consistent. Tested rollback after a failed operation and checked that a retry did not leave partially written records. Documented the SQL queries, indexing decisions, and troubleshooting steps for this demo project."
+  },
+  {
+    "evidence_id": "ev_devops_001",
+    "candidate_id": "candidate_001",
+    "source_id": "deployment_pipeline",
+    "category": "devops",
+    "date": "2026-09_mock_lab",
+    "text": "Packaged a demo Python API in Docker so developers could use the same runtime locally and in CI. Separated environment configuration from the image and supplied database paths and service settings through environment variables.\n\nCreated GitHub Actions CI/CD workflows for automated build/test steps on pull requests. Ran unit and integration tests before building the container image, and used workflow logs to locate failures in dependency installation and test setup.\n\nRehearsed deployment to a mock AWS environment using documented configuration and health checks. Investigated deployment troubleshooting cases involving missing environment variables, incorrect exposed ports, and a database file mounted at the wrong path.\n\nAdded a deployment checklist and a rollback procedure for the lab service. Verified that the previous container could be restarted with its expected configuration, and recorded build identifiers so a failed release could be traced to its source change."
+  },
+  {
+    "evidence_id": "ev_testing_001",
+    "candidate_id": "candidate_001",
+    "source_id": "backend_test_suite",
+    "category": "software_testing",
+    "date": "2026-09_mock_lab",
+    "text": "Built a pytest suite for a mock backend service with unit tests for validation, status transitions, and data conversion. Used fixtures to create predictable records and included boundary cases such as empty inputs and invalid identifiers.\n\nUsed mocks for external API clients to simulate successful responses, timeouts, and service errors. Checked both returned values and expected client calls so unit tests could exercise error handling without relying on live network services.\n\nAdded integration tests that connected API handlers to a temporary SQLite database. Performed API validation for request bodies, response schemas, status codes, and persisted records, including rollback when a multi-step operation failed.\n\nIntroduced regression testing for a previously incorrect location filter and a duplicate-record defect. Reproduced each bug with a failing test, verified the fix, and kept those cases in the automated test run to detect future changes in behaviour."
+  },
+  {
+    "evidence_id": "ev_data_001",
+    "candidate_id": "candidate_001",
+    "source_id": "data_processing_pipeline",
+    "category": "data_engineering",
+    "date": "2026-09_mock_lab",
+    "text": "Developed a Python ETL pipeline for mock event data supplied as CSV and JSON files. Used pandas to normalise column names, parse timestamps, and convert source records into a consistent tabular representation for downstream analysis.\n\nApplied validation rules for required fields, numeric ranges, and timestamp formats before loading cleaned data into SQLite. Kept rejected rows with a reason code so malformed input could be investigated without silently discarding evidence of the problem.\n\nImplemented deduplication using stable event identifiers and checked conflicting duplicate records separately. Combined multiple daily files, computed summary statistics, and compared input, rejected, duplicate, and output counts to reconcile each processing run.\n\nMade processing reproducible by sorting inputs, keeping transformation settings in one configuration, and saving run summaries. Re-ran the same source files to confirm identical cleaned output and tested recovery when one file contained an unexpected JSON structure."
+  },
+  {
+    "evidence_id": "ev_frontend_001",
+    "candidate_id": "candidate_001",
+    "source_id": "web_frontend_project",
+    "category": "frontend_engineering",
+    "date": "2026-09_mock_lab",
+    "text": "Built a mock dashboard with React and TypeScript to display job records and candidate evidence. Defined typed REST API consumption helpers for list and detail endpoints, and rendered loading, success, empty, and error states in the interface.\n\nUsed state management for search filters, selected records, and form inputs. Kept request state separate from editable form state so refreshing API data did not erase unsaved changes, and prevented stale responses from replacing the current selection.\n\nAdded client-side validation for required fields and displayed server validation errors beside the affected inputs. Checked that the interface sent the expected JSON body and handled missing optional fields without crashing the detail view.\n\nDebugged frontend/backend integration by inspecting network requests and comparing TypeScript types with the API response schema. Corrected mismatched field names, date formatting, and error handling, then verified the complete create-and-refresh interaction."
+  },
+  {
+    "evidence_id": "ev_async_001",
+    "candidate_id": "candidate_001",
+    "source_id": "async_api_client",
+    "category": "backend_engineering",
+    "date": "2026-09_mock_lab",
+    "text": "Built a mock Python asyncio client to collect records from several external API endpoints. Scheduled concurrent API calls with a bounded number of active requests so independent lookups could overlap without overwhelming the service.\n\nImplemented retries for temporary failures with increasing delays and a fixed attempt limit. Added timeout handling for individual requests, preserved cancellation, and surfaced a useful error when all retry attempts were exhausted.\n\nHandled rate limits by respecting retry delays returned by the service and reducing request concurrency in the demo workload. Kept permanent validation failures separate from retryable network errors to avoid repeatedly submitting invalid requests.\n\nTested error recovery using simulated slow responses, intermittent failures, and partial results. Recorded which endpoint failed and allowed successful responses to be processed, while retaining failed identifiers for a later retry rather than losing the whole batch."
+  },
+  {
+    "evidence_id": "ev_agent_001",
+    "candidate_id": "candidate_001",
+    "source_id": "agent_harness_project",
+    "category": "ai_application_engineering",
+    "date": "2026-09_mock_lab",
+    "text": "Developed a mock agent harness around the OpenAI Responses API with function calling for structured job lookup. Defined tool inputs and results explicitly, then connected model-requested calls to Python tool execution and returned their outputs to the conversation.\n\nUsed a bounded agent loop with a maximum number of iterations so repeated tool requests could not continue indefinitely. Kept an approval boundary before write operations and checked that read-only lookups could complete without requesting approval.\n\nStored job records and candidate evidence in SQLite and used a custom exception hierarchy to distinguish provider, storage, and tool failures. Tested missing records and failed operations so errors could be reported through the shared harness runtime handling.\n\nAdded embeddings and dense retrieval for the RAG lab by splitting evidence into chunks and comparing vectors with cosine similarity. Reused embeddings by chunk content hash, retrieved supporting text for candidate questions, and kept the original source identifiers available for inspecting search results."
+  }
+]

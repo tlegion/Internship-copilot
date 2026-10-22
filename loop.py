@@ -1,0 +1,191 @@
+import json
+from pathlib import Path
+from dotenv import load_dotenv
+from openai import OpenAI
+from enum import Enum
+from typing import Any
+from provider import call_model, format_tool_output, format_user_input, load_tool_arguments
+from tool_call import run_tool
+from skill import discover_skills
+from conversation import get_user_input, display_item
+from models import ModelProvider, ModelResponse, ModelToolCall, UserInput, ToolOutput
+from errors import HarnessError
+
+load_dotenv(Path(__file__).with_name('.env'))
+
+
+
+def tool_loop(tool_calls:list[ModelToolCall], provider:ModelProvider, round:int, step:int, max_tool_call:int = 10,
+              *, catalog: dict | None = None, loaded_skills: set | None = None):
+    tool_outputs:list[ToolOutput] = []
+    if loaded_skills is None:
+        loaded_skills = set()
+    availability_snapshot = loaded_skills.copy()
+    activated_skills = set()
+    call_count = 0
+    for index, call in enumerate(tool_calls):
+        if index >= max_tool_call:
+            result = {
+                "success": False,
+                "error_type": "ToolBudgetExceeded",
+                "error_msg": "Tool call limit exceeded"
+            }
+        else:
+            arguments = load_tool_arguments(call.arguments, provider)
+            result = run_tool(
+                call.tool_name,
+                arguments,
+                call.call_id,
+                catalog=catalog,
+                loaded_skills=availability_snapshot,
+            )
+            if call.tool_name == "load_skill" and result["success"]:
+                activated_skills.add(arguments["name"])
+
+        tool_outputs.append(ToolOutput(
+            tool_name=call.tool_name,
+            call_id=call.call_id,
+            output=result,
+            round=round,
+            step=step
+        ))
+    loaded_skills.update(activated_skills)
+    return tool_outputs
+
+
+def adapt_provider_format(provider:ModelProvider, history:list):
+    formatted = []
+
+    for item in history:
+        if isinstance(item, UserInput):
+            formatted.append(format_user_input(item, provider))
+        elif isinstance(item,ModelResponse):
+            if provider == ModelProvider.OPENAI:
+                formatted.extend(item.raw.output)
+        elif isinstance(item, ToolOutput):
+            formatted.append(format_tool_output(item, provider))
+
+    return formatted
+
+def construct_system_prompt(round:int, step:int, max_round:int, max_step:int):
+    return f"""
+You are an internship assistant agent.
+
+Your scope is limited to:
+- internship and job information
+- job search and comparison
+- resume and interview preparation
+- career-related reasoning
+- tasks supported by the tools available to you
+
+Current execution state:
+- round: {round}/{max_round}
+- tool step: {step}/{max_step}
+
+
+Rules:
+- Do not answer requests unrelated to internships, jobs, careers, or your available tools.
+- For out-of-scope requests, briefly explain that the request is outside your scope and redirect the user to an internship-related task.
+- Use tools whenever authoritative information must come from a tool.
+- Never fabricate tool results.
+- Treat tool outputs as the source of truth for tool-provided data.
+- After receiving tool output, continue until you can give a final answer.
+- If a tool fails, report the failure clearly.
+- Keep answers concise and relevant.
+""".strip()
+
+
+
+def conversation_loop(
+        provider:ModelProvider= ModelProvider.OPENAI, 
+        model:str= "gpt-6-luna", 
+        max_round:int = 10, max_step:int = 3,
+        *, input_reader=None, event_sink=None, max_tool_call:int = 10,
+    ):
+    # Optional seams use the same conversation/tool path as the interactive CLI.
+    read_input = input_reader or get_user_input
+
+    def publish(item):
+        if event_sink is None:
+            display_item(item)
+        else:
+            event_sink(item)
+
+    history = []
+    catalog = discover_skills()
+    loaded_skills = set()
+    user_ended = False
+    round = 1
+
+
+    while not user_ended and round <= max_round:
+        user_input = read_input(round)
+
+        if user_input is None:
+            break
+        history.append(user_input)
+        if event_sink is not None:
+            event_sink(user_input)
+        try:
+            response = call_model(
+                provider, model,
+                adapt_provider_format(provider, history),
+                construct_system_prompt(round, 0, max_round, max_step), round, "auto",
+                catalog=catalog, loaded_skills=loaded_skills,
+            )
+        except HarnessError as error:
+            response = {"error_msg": str(error)}
+            publish(response)
+            round += 1
+            continue
+
+        history.append(response)
+        publish(response)
+
+
+        if tool_calls := getattr(response, "tool_calls", None):
+            step = 1
+            while step <= max_step:
+
+                if tool_calls := getattr(response, "tool_calls", None):
+                    
+                    tool_outputs= tool_loop(tool_calls, provider, round, step, max_tool_call,
+                                            catalog=catalog, loaded_skills=loaded_skills)
+                    step += 1
+
+                    history.extend(tool_outputs)
+                    for output in tool_outputs:
+                        publish(output)
+                    if step > max_step:
+                        tool_choice = "none"
+                    else:
+                        tool_choice = "auto"
+                    try:
+                        response = call_model(
+                            provider, model,
+                            adapt_provider_format(provider, history),
+                            construct_system_prompt(round, step, max_round, max_step),
+                            round, tool_choice,
+                            catalog=catalog, loaded_skills=loaded_skills,
+                        )
+                    except HarnessError as error:
+                        response = {"error_msg": str(error)}
+                        publish(response)
+                        break
+                    history.append(response)
+                    publish(response)
+                else:
+                    break
+
+
+
+        round += 1
+
+    return history
+
+
+def start_conversation_OpenAI():
+    conversation_loop()
+
+if __name__ == "__main__":
+    start_conversation_OpenAI()
