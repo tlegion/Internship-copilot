@@ -158,12 +158,17 @@ def _grader_payload(case, fixtures, events, checks):
         if row["evidence_id"] in case.evidence_refs or row["candidate_id"] == case.candidate_id
     ]
     event_kinds = {
-        "user", "assistant", "tool_output", "tool_failure", "approval", "approval_unexpected",
+        "user", "assistant", "tool_output", "tool_failure",
         "checker_validation_failure", "runtime_error", "scenario_error", "fault_injected",
     }
     api_fields = ("kind", "api", "request_number", "status_code", "usage", "latency_seconds")
+    # Python audits authorization; all checks still reach overall() and the report.
+    approval_checks = {
+        "all_scripted_approvals_used", "initial:decisions", "similar:decisions",
+        "rejection_did_not_write",
+    }
     return {
-        "scenario": case.model_dump(),
+        "scenario": case.model_dump(exclude={"approvals"}),
         "originals": {
             "evidence": evidence,
             "jobs": [row for row in fixtures["jobs"] if row["id"] in case.job_refs],
@@ -174,7 +179,7 @@ def _grader_payload(case, fixtures, events, checks):
             {key: event.get(key) for key in api_fields}
             for event in events if event["kind"].startswith("api_")
         ],
-        "assertions": checks,
+        "assertions": [check for check in checks if check["name"] not in approval_checks],
     }
 
 

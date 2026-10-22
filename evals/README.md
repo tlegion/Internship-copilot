@@ -104,9 +104,18 @@ adjudication; it is not an escape from difficult reasoning. A correct factual
 `insufficient_evidence` normally merits PASS. Grader API errors, refusals,
 incomplete or invalid responses are GRADER_ERROR, never REVIEW. Grading uses one
 independent structured pass with no tools or database access. Grader payloads
-include originals, ground truth, scripted turns, actual answers/tool events,
-approvals and hard checks; redundant raw API bodies/vectors stay in the durable
-trace rather than inflating the grading context.
+include originals, ground truth, scripted turns, actual answers/tool results and
+business-result checks. Internal approval events, approval configuration and
+approval-only checks stay out of the semantic input. The full approval audit and
+all checks remain in trace/summary and still determine the overall result.
+
+Harness owns authorization; Python assertions audit it. Unless the user explicitly
+asks about approval status or history, unsolicited narration of internal approval
+steps does not determine the semantic grade for a successful business task. The
+Grader still checks creation/cancellation outcomes, factual job details and honest
+reporting of Tool failures: a rejected or unsuccessful action must never be claimed
+completed. Candidate-fact and citation criteria remain unchanged. Redundant raw
+API bodies/vectors stay in the durable trace rather than inflating grading context.
 
 ## Reports and failures
 

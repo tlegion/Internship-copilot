@@ -14,7 +14,7 @@ import httpx2 as httpx
 from evals import run
 from evals.assertions import assertions
 from evals.fixtures import Job, load_fixtures, ROOT
-from evals.grader import EvalGrade, grade, overall
+from evals.grader import EvalGrade, RUBRIC, grade, overall
 from evals.instrumentation import Approvals, observe_apis, observe_checker
 from evals.isolation import Sandbox, SafetyError
 from evals.recording import (
@@ -222,6 +222,220 @@ class EvalTests(unittest.TestCase):
         self.assertTrue(any(event["kind"] == "user" for event in self.log.events))
         self.assertTrue(any(event["kind"] == "tool_output" for event in self.log.events))
 
+    def test_grader_payload_excludes_only_internal_approval_audit(self):
+        case = self.cases["similar_accepted"]
+        audit_names = [
+            "all_scripted_approvals_used", "initial:decisions", "similar:decisions",
+            "rejection_did_not_write",
+        ]
+        audit_checks = [
+            {"name": name, "passed": False, "detail": "INTERNAL_AUDIT_ONLY"}
+            for name in audit_names
+        ]
+        business_checks = [
+            {"name": "exact_job_changes", "passed": True, "detail": None},
+            {"name": "existing_jobs_unchanged", "passed": True, "detail": None},
+            {"name": "non_job_tables_unchanged", "passed": True, "detail": None},
+        ]
+        checks = audit_checks + business_checks
+        business_events = [
+            {"kind": "user", "text": case.prompts[0]},
+            {"kind": "assistant", "text": "Created job_009."},
+            {"kind": "tool_output", "tool": "create_job", "output": {
+                "success": True, "result": {
+                    "status": "created", "job_id": "job_009", "user_selection": True,
+                    "similar_job_ids": ["job_001", "job_008"],
+                },
+            }},
+            {"kind": "tool_failure", "output": {"success": False, "error_type": "ToolError"}},
+        ]
+        events = business_events + [
+            {"kind": "approval", "decision": True, "detail": "INTERNAL_AUDIT_ONLY"},
+            {"kind": "approval_unexpected", "detail": "INTERNAL_AUDIT_ONLY"},
+        ]
+        original_case = case.model_dump()
+        original_checks = deepcopy(checks)
+        original_events = deepcopy(events)
+        payload = run._grader_payload(case, self.fixtures, events, checks)
+        self.assertEqual(payload["scenario"], case.model_dump(exclude={"approvals"}))
+        self.assertEqual(payload["events"], business_events)
+        self.assertEqual(payload["assertions"], business_checks)
+        self.assertNotIn("INTERNAL_AUDIT_ONLY", json.dumps(payload))
+        self.assertEqual(case.model_dump(), original_case)
+        self.assertEqual(checks, original_checks)
+        self.assertEqual(events, original_events)
+        # Filtering the semantic input must not change the complete hard-check result.
+        for check in audit_checks:
+            with self.subTest(assertion=check["name"]):
+                self.assertEqual(overall([check, *business_checks], {"status": "PASS"}), "FAIL")
+
+    def test_creation_outcomes_keep_approval_audit_in_trace_and_summary(self):
+        self.prepare()
+        self.args.no_grader = False
+        results = []
+        messages = {
+            "write_accepted": "Created the requested job as job_009.",
+            "similar_accepted": (
+                "Created Backend Engineering Intern at Demo Atlas Systems in Brisbane "
+                "(job ID: job_009). No additional approval or review was required."
+            ),
+            "write_rejected": "Creation did not complete; no job was created.",
+            "similar_rejected": "Creation was cancelled; no job was created.",
+            "duplicate_job": "The exact job already exists; no new job was created.",
+        }
+        # The grader is mocked: verify its input boundary, not live grading accuracy.
+        for name, answer in messages.items():
+            with self.subTest(case=name):
+                case = self.cases[name]
+                responses = iter([
+                    self.model("create_job", case.expected[0].arguments), self.model(text=answer),
+                ])
+
+                def agent(*args, **kwargs):
+                    self.log.event("api_request", api="main_agent")
+                    return next(responses)
+
+                with (
+                    patch("loop.call_model", side_effect=agent),
+                    patch("evals.grader.grade", return_value={"status": "PASS"}) as grader,
+                ):
+                    result, interruption = run.run_case(
+                        case, self.sandbox, self.fixtures, self.log, self.args,
+                    )
+                self.assertIsNone(interruption)
+                self.assertEqual(result["status"], "PASS", result["assertions"])
+                results.append(result)
+                checks = {check["name"]: check for check in result["assertions"]}
+                for check_name in (
+                    "all_scripted_approvals_used", "initial:decisions", "similar:decisions",
+                ):
+                    self.assertTrue(checks[check_name]["passed"])
+                if "rejected" in name:
+                    self.assertTrue(checks["rejection_did_not_write"]["passed"])
+                self.assertTrue(checks["exact_job_changes"]["passed"])
+
+                payload = grader.call_args.args[0]
+                self.assertNotIn("approvals", payload["scenario"])
+                self.assertFalse(any(
+                    event["kind"].startswith("approval") for event in payload["events"]
+                ))
+                self.assertEqual(payload["events"][-1]["text"], answer)
+                output = next(event["output"] for event in payload["events"]
+                              if event["kind"] == "tool_output")
+                if name in {"write_accepted", "similar_accepted"}:
+                    self.assertEqual(output["result"]["status"], "created")
+                    self.assertEqual(output["result"]["job_id"], "job_009")
+                elif name == "similar_rejected":
+                    self.assertEqual(output["result"]["status"], "cancelled")
+                    self.assertIsNone(output["result"]["job_id"])
+                else:
+                    self.assertFalse(output["success"])
+                self.assertTrue(any(check["name"] == "exact_job_changes"
+                                    for check in payload["assertions"]))
+                self.assertFalse(any(check["name"].endswith(":decisions")
+                                     for check in payload["assertions"]))
+
+        self.log.finish({"status": "PASS", "results": results})
+        saved = json.loads((self.log.directory / "summary.json").read_text())
+        self.assertEqual(saved["results"], results)
+        trace_lines = (self.log.directory / "trace.jsonl").read_text().splitlines()
+        trace = [json.loads(line) for line in trace_lines]
+        for name in messages:
+            case = self.cases[name]
+            decisions = [event for event in trace
+                         if event["scenario"] == name and event["kind"] == "approval"]
+            self.assertEqual([event["boundary"] for event in decisions], list(case.approvals))
+            for event in decisions:
+                self.assertEqual(event["decision"], case.approvals[event["boundary"]][0])
+                self.assertEqual(event["arguments"], case.expected[0].arguments)
+                if event["boundary"] == "similar":
+                    reviewed_ids = {row["id"] for row in event["similars"]}
+                    self.assertEqual(reviewed_ids, {"job_001", "job_008"})
+
+    def test_failed_approval_audit_still_fails_run_with_positive_semantic_grade(self):
+        self.prepare()
+        self.args.no_grader = False
+        # An unused scripted decision should fail only the audit, not the actual write.
+        case = self.cases["similar_accepted"].model_copy(update={
+            "approvals": {"initial": [True, True], "similar": [True]},
+        })
+        responses = iter([
+            self.model("create_job", case.expected[0].arguments), self.model(text="Created job_009."),
+        ])
+
+        def agent(*args, **kwargs):
+            self.log.event("api_request", api="main_agent")
+            return next(responses)
+
+        with (
+            patch("loop.call_model", side_effect=agent),
+            patch("evals.grader.grade", return_value={"status": "PASS"}) as grader,
+        ):
+            result, interruption = run.run_case(
+                case, self.sandbox, self.fixtures, self.log, self.args,
+            )
+        self.assertIsNone(interruption)
+        self.assertEqual(result["status"], "FAIL")
+        failed = {check["name"] for check in result["assertions"] if not check["passed"]}
+        self.assertEqual(failed, {"all_scripted_approvals_used", "initial:decisions"})
+        self.assertTrue(all(check["passed"] for check in grader.call_args.args[0]["assertions"]))
+        self.log.finish({"status": "FAIL", "results": [result]})
+        summary = json.loads((self.log.directory / "summary.json").read_text())
+        self.assertEqual(summary["results"][0]["assertions"], result["assertions"])
+
+    def test_false_completion_after_rejection_remains_a_semantic_failure(self):
+        self.prepare()
+        self.args.no_grader = False
+        for name in ("write_rejected", "similar_rejected"):
+            with self.subTest(case=name):
+                case = self.cases[name]
+                responses = iter([
+                    self.model("create_job", case.expected[0].arguments),
+                    self.model(text="Created job_009 successfully."),
+                ])
+
+                def agent(*args, **kwargs):
+                    self.log.event("api_request", api="main_agent")
+                    return next(responses)
+
+                # Mock the semantic verdict; this tests the payload and verdict wiring,
+                # not a live model's ability to recognize the false completion claim.
+                with (
+                    patch("loop.call_model", side_effect=agent),
+                    patch("evals.grader.grade", return_value={"status": "FAIL"}) as grader,
+                ):
+                    result, _ = run.run_case(case, self.sandbox, self.fixtures, self.log, self.args)
+                self.assertTrue(all(check["passed"] for check in result["assertions"]))
+                self.assertEqual(result["status"], "FAIL")
+                payload = grader.call_args.args[0]
+                self.assertEqual(payload["events"][-1]["text"], "Created job_009 successfully.")
+                output = next(event["output"] for event in payload["events"]
+                              if event["kind"] == "tool_output")
+                self.assertTrue(not output["success"] or output["result"]["status"] == "cancelled")
+
+    def test_grader_keeps_candidate_facts_citations_and_failure_criteria(self):
+        case = self.cases["verify_academic"]
+        checks = [{"name": "candidate:citation_source", "passed": False, "detail": "inexact quote"}]
+        events = [{"kind": "tool_output", "tool": "verify_candidate_claim", "output": {
+            "success": True, "result": {"verdict": "supported", "selected_evidence": []},
+        }}]
+        payload = run._grader_payload(case, self.fixtures, events, checks)
+        self.assertEqual(payload["assertions"], checks)
+        self.assertEqual(payload["events"], events)
+        self.assertEqual(payload["scenario"]["ground_truth"], case.ground_truth)
+        self.assertTrue(payload["originals"]["evidence"])
+        self.assertIn(
+            "Check factual accuracy, original claim scope, chronology, academic/staging/mock vs\n"
+            "production classification, inventions, semantic citation roles and substantive\n"
+            "support from quotations. Material contradictions/qualifications must remain visible.",
+            RUBRIC,
+        )
+        self.assertIn("Check that failed tools are reported honestly", RUBRIC)
+        self.assertIn("Unless the user explicitly asks about approval status or history", RUBRIC)
+        self.assertIn("must not determine PASS/FAIL for an otherwise successful business task", RUBRIC)
+        self.assertIn("or unsuccessful action must not be falsely reported as completed", RUBRIC)
+        self.assertIn("A hard Python assertion failure always makes the scenario FAIL", RUBRIC)
+
     def test_grader_payload_excludes_database_states_vectors_and_raw_api_bodies(self):
         self.prepare()
         self.args.no_grader = False
@@ -353,6 +567,7 @@ class EvalTests(unittest.TestCase):
                 self.assertIs(request["text_format"], EvalGrade)
                 self.assertIs(request["store"], False)
                 self.assertNotIn("tools", request)
+                self.assertEqual(request["input"][0], {"role": "system", "content": RUBRIC})
 
     def test_grader_api_refusal_incomplete_and_schema_errors_are_not_review(self):
         with patch("openai.OpenAI") as factory:

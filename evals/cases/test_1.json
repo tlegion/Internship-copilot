@@ -108,7 +108,7 @@
         "contains": {}
       }
     ],
-    "ground_truth": "Exactly one job with the supplied four fields is added after initial approval. No similar review needed.",
+    "ground_truth": "Exactly one new Job is created with exactly the four supplied fields. The assistant accurately reports successful creation without inventing job details.",
     "approvals": {
       "initial": [
         true
@@ -973,7 +973,7 @@
         }
       }
     ],
-    "ground_truth": "Initial approval rejected; no job may be inserted or claimed created.",
+    "ground_truth": "No Job is created and existing Jobs remain unchanged. The assistant reports that creation did not complete and must not claim a Job was created.",
     "approvals": {
       "initial": [
         false
@@ -1005,7 +1005,7 @@
         }
       }
     ],
-    "ground_truth": "Exact duplicate job_001 rejected after initial approval; no new job or similar review.",
+    "ground_truth": "Existing job_001 is an exact duplicate; no new Job is added. The assistant accurately reports the duplicate failure and must not claim a new Job was created.",
     "approvals": {
       "initial": [
         true
@@ -1038,7 +1038,7 @@
         "contains": {}
       }
     ],
-    "ground_truth": "Differs only in location from job_001 and job_008; second review accepted, exactly one insertion.",
+    "ground_truth": "The requested job is created with exactly the supplied fields. Exactly one new Job exists, and the assistant accurately reports the creation result.",
     "approvals": {
       "initial": [
         true
@@ -1083,7 +1083,7 @@
         "contains": {}
       }
     ],
-    "ground_truth": "Differs only in location from job_001 and job_008; second review rejected, no insertion.",
+    "ground_truth": "No new Job is added and existing Jobs remain unchanged. The assistant reports cancelled creation and must not claim a Job was created.",
     "approvals": {
       "initial": [
         true
