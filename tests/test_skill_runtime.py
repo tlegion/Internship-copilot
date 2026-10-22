@@ -67,7 +67,7 @@ Instructions only loaded on demand.
             catalog = skill.discover_skills(self.root)
         entry = catalog["job-comparison"]
         self.assertEqual(entry["description"], "Compare stored jobs by responsibilities and technologies.")
-        self.assertEqual(entry["path"], self.directory / "SKILL.md")
+        self.assertEqual(entry["path"], (self.directory / "SKILL.md").resolve())
         self.assertEqual(entry["frontmatter"]["metadata"], {"author": "tester"})
         self.assertEqual(entry["frontmatter"]["license"], "MIT")
 
